@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import LoginDoodles from './LoginDoodles';
+import Login3DIllustration from './Login3DIllustration';
 import './Login.css';
 
 const Login = () => {
@@ -66,30 +67,30 @@ const Login = () => {
   return (
     <div className="login-container">
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
         className="login-card"
       >
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: 'spring' }}
-          className="login-header"
-        >
-          <img 
-            src="/logo512.png" 
-            alt="Spentee Logo" 
-            className="login-logo"
-            onError={(e) => {
-              // Fallback to text if logo not found
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'block';
-            }}
-          />
-          <h1 style={{ display: 'none' }}>💰 Spentee</h1>
-          <p>Manage all your money with ease</p>
-        </motion.div>
+        {/* Form Section */}
+        <div className="login-form-section">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="login-header"
+          >
+            <img 
+              src="/logo512.png" 
+              alt="Spentee Logo" 
+              className="login-logo"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
+            <p className="welcome-text">Welcome back!</p>
+            <h1>Log In</h1>
+          </motion.div>
 
         <form onSubmit={handleSubmit} className="login-form">
           {error && (
@@ -103,18 +104,20 @@ const Login = () => {
           )}
 
           <div className="form-group">
-            <label>Username</label>
+            <label>Email</label>
             <input
-              type="text"
+              type="email"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder="Enter username"
+              placeholder="login@gmail.com"
             />
           </div>
 
           <div className="form-group">
-            <label>Password</label>
+            <div className="forgot-password-link">
+              <a href="#forgot">Forgot Password ?</a>
+            </div>
             <div className="password-input-wrapper">
               <input
                 type={passwordVisible ? "text" : "password"}
@@ -159,15 +162,43 @@ const Login = () => {
             )}
           </motion.button>
         </form>
+        
+        {/* Social Login Section */}
+        <div className="social-login-section">
+          <p className="social-divider">Or log in with</p>
+          <div className="social-buttons">
+            <button className="social-button" type="button" aria-label="Login with Google">
+              <span className="social-icon">G</span>
+            </button>
+            <button className="social-button" type="button" aria-label="Login with GitHub">
+              <span className="social-icon">⚫</span>
+            </button>
+            <button className="social-button" type="button" aria-label="Login with Facebook">
+              <span className="social-icon">f</span>
+            </button>
+          </div>
+          
+          <p className="signup-link">
+            Don't have an account yet? <a href="#signup" className="signup-link-accent">Sign up for free</a>
+          </p>
+        </div>
+        
+        {/* Doodles at bottom */}
+        <LoginDoodles
+          isWatching={true}
+          isLookingAtButton={isLookingAtButton}
+          isShakingHead={isShakingHead}
+          isNodding={isNodding}
+          isLookingAway={isLookingAway}
+          passwordVisible={passwordVisible}
+        />
+        </div>
+        
+        {/* 3D Illustration Section */}
+        <div className="login-illustration-section">
+          <Login3DIllustration />
+        </div>
       </motion.div>
-      <LoginDoodles
-        isWatching={true}
-        isLookingAtButton={isLookingAtButton}
-        isShakingHead={isShakingHead}
-        isNodding={isNodding}
-        isLookingAway={isLookingAway}
-        passwordVisible={passwordVisible}
-      />
     </div>
   );
 };
