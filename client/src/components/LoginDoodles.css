@@ -55,6 +55,7 @@
   background: #10b981;
   border-radius: 50%;
   position: relative;
+  transform-origin: center center;
 }
 
 .doodle-eye::after {
