@@ -1,0 +1,23 @@
+{
+  "name": "spendee",
+  "version": "1.0.0",
+  "description": "Manage all your money with ease from one place",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "mobile": "cd mobile && npm start",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install && cd ../mobile && npm install"
+  },
+  "keywords": [
+    "finance",
+    "expense",
+    "tracker"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
