@@ -100,10 +100,6 @@ const Login = () => {
             {loading ? 'Logging in...' : 'Login'}
           </motion.button>
         </form>
-
-        <div className="login-info">
-          <p>Default credentials: admin / admin</p>
-        </div>
       </motion.div>
     </div>
   );
