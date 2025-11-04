@@ -1,7 +1,7 @@
 {
   "name": "spendee-server",
   "version": "1.0.0",
-  "description": "Backend API for Spendee - Expense Tracking Application",
+  "description": "Backend API for SpenTee - Expense Tracking Application",
   "main": "index.js",
   "engines": {
     "node": ">=18.0.0",

@@ -1,8 +1,8 @@
-# 💰 Spendee - Personal Finance Management App
+# 💰 SpenTee - Personal Finance Management App
 
 A comprehensive expense tracking and financial management application with a modern web dashboard and mobile app support.
 
-![Spendee](https://img.shields.io/badge/Spendee-Finance%20App-blue)
+![SpenTee](https://img.shields.io/badge/SpenTee-Finance%20App-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green)

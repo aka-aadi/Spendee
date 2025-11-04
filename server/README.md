@@ -1,6 +1,6 @@
-# Spendee Server API
+# SpenTee Server API
 
-Backend API server for the Spendee expense tracking application.
+Backend API server for the SpenTee expense tracking application.
 
 ## 🚀 Features
 

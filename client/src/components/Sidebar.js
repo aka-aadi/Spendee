@@ -87,7 +87,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             className="sidebar"
           >
             <div className="sidebar-header">
-              <h2>💰 Spendee</h2>
+              <h2>💰 SpenTee</h2>
             </div>
 
             <nav className="sidebar-nav">

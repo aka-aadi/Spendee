@@ -75,7 +75,7 @@ app.use('/api/financial', require('./routes/financial'));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Spendee API is running' });
+  res.json({ status: 'OK', message: 'SpenTee API is running' });
 });
 
 const PORT = process.env.PORT || 5000;
