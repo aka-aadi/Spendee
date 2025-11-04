@@ -22,7 +22,28 @@ if (!MONGODB_URI) {
 }
 
 mongoose.connect(MONGODB_URI)
-.then(() => console.log('MongoDB connected successfully'))
+.then(async () => {
+  console.log('MongoDB connected successfully');
+  
+  // Auto-initialize admin user on server start
+  try {
+    const User = require('./models/User');
+    const adminExists = await User.findOne({ username: 'admin' });
+    if (!adminExists) {
+      const admin = new User({
+        username: 'admin',
+        password: 'chunguchi',
+        role: 'admin'
+      });
+      await admin.save();
+      console.log('✅ Admin user created with password: chunguchi');
+    } else {
+      console.log('ℹ️  Admin user already exists');
+    }
+  } catch (error) {
+    console.error('Error initializing admin:', error.message);
+  }
+})
 .catch(err => {
   console.error('MongoDB connection error:', err.message);
   console.error('Please check your MONGODB_URI in the .env file');
