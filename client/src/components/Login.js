@@ -60,8 +60,8 @@ const Login = () => {
             src="/logo512.png" 
             alt="Spentee Logo" 
             className="login-logo"
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
             transition={{ delay: 0.3, type: "spring", stiffness: 200, damping: 15 }}
             onError={(e) => {
               e.target.style.display = 'none';
