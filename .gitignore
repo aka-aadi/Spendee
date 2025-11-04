@@ -6,6 +6,7 @@ node_modules/
 # Testing
 /coverage
 
+
 # Production
 /build
 /dist
@@ -45,4 +46,7 @@ web-build/
 server/.env
 client/.env
 mobile/.env
+
+# Mobile app (excluded from repo)
+mobile/
 
