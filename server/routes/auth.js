@@ -12,11 +12,17 @@ router.post('/init', async (req, res) => {
     if (!adminExists) {
       const admin = new User({
         username: 'admin',
-        password: 'admin',
+        password: 'chunguchi',
         role: 'admin'
       });
       await admin.save();
       return res.json({ message: 'Admin user created successfully' });
+    }
+    // Ensure existing admin has admin role
+    if (adminExists.role !== 'admin') {
+      adminExists.role = 'admin';
+      await adminExists.save();
+      return res.json({ message: 'Admin user role updated' });
     }
     res.json({ message: 'Admin user already exists' });
   } catch (error) {

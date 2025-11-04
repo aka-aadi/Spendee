@@ -38,7 +38,14 @@ mongoose.connect(MONGODB_URI)
       await admin.save();
       console.log('✅ Admin user created with password: chunguchi');
     } else {
-      console.log('ℹ️  Admin user already exists');
+      // Ensure existing admin has admin role
+      if (adminExists.role !== 'admin') {
+        adminExists.role = 'admin';
+        await adminExists.save();
+        console.log('✅ Admin user role updated to admin');
+      } else {
+        console.log('ℹ️  Admin user already exists');
+      }
     }
   } catch (error) {
     console.error('Error initializing admin:', error.message);

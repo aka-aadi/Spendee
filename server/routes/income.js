@@ -6,7 +6,9 @@ const Income = require('../models/Income');
 // Get all income
 router.get('/', authenticate, async (req, res) => {
   try {
-    const income = await Income.find({ userId: req.user._id }).sort({ date: -1 });
+    // Admin users can see all income, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    const income = await Income.find(query).sort({ date: -1 });
     res.json(income);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching income', error: error.message });
@@ -16,7 +18,11 @@ router.get('/', authenticate, async (req, res) => {
 // Get income by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const income = await Income.findOne({ _id: req.params.id, userId: req.user._id });
+    // Admin users can see any income, regular users see only their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const income = await Income.findOne(query);
     if (!income) {
       return res.status(404).json({ message: 'Income not found' });
     }
@@ -43,8 +49,12 @@ router.post('/', authenticate, async (req, res) => {
 // Update income
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Admin users can update any income, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     const income = await Income.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
+      query,
       req.body,
       { new: true, runValidators: true }
     );
@@ -60,7 +70,11 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete income
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const income = await Income.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    // Admin users can delete any income, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const income = await Income.findOneAndDelete(query);
     if (!income) {
       return res.status(404).json({ message: 'Income not found' });
     }
@@ -74,7 +88,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { userId: req.user._id };
+    // Admin users can see all income, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

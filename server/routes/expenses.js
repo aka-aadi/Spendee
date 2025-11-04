@@ -6,7 +6,9 @@ const Expense = require('../models/Expense');
 // Get all expenses
 router.get('/', authenticate, async (req, res) => {
   try {
-    const expenses = await Expense.find({ userId: req.user._id }).sort({ date: -1 });
+    // Admin users can see all expenses, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    const expenses = await Expense.find(query).sort({ date: -1 });
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses', error: error.message });
@@ -16,7 +18,11 @@ router.get('/', authenticate, async (req, res) => {
 // Get expense by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const expense = await Expense.findOne({ _id: req.params.id, userId: req.user._id });
+    // Admin users can see any expense, regular users see only their own
+    const query = req.user.role === 'admin' 
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const expense = await Expense.findOne(query);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -43,8 +49,12 @@ router.post('/', authenticate, async (req, res) => {
 // Update expense
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Admin users can update any expense, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     const expense = await Expense.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
+      query,
       req.body,
       { new: true, runValidators: true }
     );
@@ -60,7 +70,11 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete expense
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const expense = await Expense.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    // Admin users can delete any expense, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const expense = await Expense.findOneAndDelete(query);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -74,7 +88,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { userId: req.user._id };
+    // Admin users can see all expenses, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

@@ -6,7 +6,9 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all UPI payments
 router.get('/', authenticate, async (req, res) => {
   try {
-    const upiPayments = await UPIPayment.find({ userId: req.user._id }).sort({ date: -1 });
+    // Admin users can see all UPI payments, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    const upiPayments = await UPIPayment.find(query).sort({ date: -1 });
     res.json(upiPayments);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching UPI payments', error: error.message });
@@ -16,7 +18,11 @@ router.get('/', authenticate, async (req, res) => {
 // Get UPI payment by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const upiPayment = await UPIPayment.findOne({ _id: req.params.id, userId: req.user._id });
+    // Admin users can see any UPI payment, regular users see only their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const upiPayment = await UPIPayment.findOne(query);
     if (!upiPayment) {
       return res.status(404).json({ message: 'UPI payment not found' });
     }
@@ -48,8 +54,12 @@ router.post('/', authenticate, async (req, res) => {
 // Update UPI payment
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Admin users can update any UPI payment, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     const upiPayment = await UPIPayment.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
+      query,
       req.body,
       { new: true, runValidators: true }
     );
@@ -65,7 +75,11 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete UPI payment
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const upiPayment = await UPIPayment.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    // Admin users can delete any UPI payment, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const upiPayment = await UPIPayment.findOneAndDelete(query);
     if (!upiPayment) {
       return res.status(404).json({ message: 'UPI payment not found' });
     }
@@ -79,7 +93,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { userId: req.user._id };
+    // Admin users can see all UPI payments, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

@@ -11,7 +11,8 @@ const UPIPayment = require('../models/UPIPayment');
 router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { userId: req.user._id };
+    // Admin users can see all data, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     let dateQuery = {};
     if (startDate && endDate) {
