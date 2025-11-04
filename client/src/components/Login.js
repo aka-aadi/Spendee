@@ -53,7 +53,7 @@ const Login = () => {
           transition={{ delay: 0.2, type: 'spring' }}
           className="login-header"
         >
-          <h1>💰 SpenTee</h1>
+          <h1>💰 Spentee</h1>
           <p>Manage all your money with ease</p>
         </motion.div>
 

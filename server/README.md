@@ -1,6 +1,6 @@
-# SpenTee Server API
+# Spentee Server API
 
-Backend API server for the SpenTee expense tracking application.
+Backend API server for the Spentee expense tracking application.
 
 ## 🚀 Features
 
@@ -174,7 +174,7 @@ Expected response:
 ```json
 {
   "status": "OK",
-  "message": "SpenTee API is running"
+  "message": "Spentee API is running"
 }
 ```
 
