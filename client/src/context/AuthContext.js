@@ -15,7 +15,22 @@ export const useAuth = () => {
 // Production API URL - can be overridden with REACT_APP_API_URL environment variable
 const API_URL = process.env.REACT_APP_API_URL || 'https://spendee-qkf8.onrender.com/api';
 
+// Configure axios defaults
 axios.defaults.baseURL = API_URL;
+axios.defaults.withCredentials = true; // Enable cookies for session management
+
+// Add response interceptor to handle authentication errors
+axios.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Session expired or invalid - clear auth state
+      // This will be handled by the component using the context
+      console.log('Session expired or invalid');
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,33 +39,27 @@ export const AuthProvider = ({ children }) => {
   const cleanupTimerRef = useRef(null);
 
   useEffect(() => {
-    const validateToken = async () => {
-      const token = localStorage.getItem('token');
-      const userData = localStorage.getItem('user');
-      
-      if (token && userData) {
-        try {
-          // Verify token is still valid by making a test request
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          // Validate token by making a request that requires authentication
-          // Try to get expenses list - if token is valid, this will succeed
-          await axios.get('/expenses', { params: { limit: 0 } });
-          // Token is valid
-          setUser(JSON.parse(userData));
+    const checkAuthStatus = async () => {
+      try {
+        // Check if user is authenticated by calling /auth/me
+        const response = await axios.get('/auth/me');
+        if (response.data && response.data.user) {
+          setUser(response.data.user);
           setIsAuthenticated(true);
-        } catch (error) {
-          // Token is invalid or expired
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          delete axios.defaults.headers.common['Authorization'];
-          setUser(null);
+        } else {
           setIsAuthenticated(false);
+          setUser(null);
         }
+      } catch (error) {
+        // Not authenticated or session expired
+        setIsAuthenticated(false);
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    validateToken();
+    checkAuthStatus();
   }, []);
 
   // Setup inactivity timer (30 minutes)
@@ -64,7 +73,7 @@ export const AuthProvider = ({ children }) => {
       return;
     }
     
-    const handleInactivity = () => {
+    const handleInactivity = async () => {
       // Show warning before logout
       const shouldStay = window.confirm(
         'You have been inactive for 30 minutes. Do you want to stay logged in?\n\nClick OK to continue, or Cancel to logout.'
@@ -72,9 +81,11 @@ export const AuthProvider = ({ children }) => {
       
       if (!shouldStay) {
         // User chose to logout
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        delete axios.defaults.headers.common['Authorization'];
+        try {
+          await axios.post('/auth/logout').catch(console.error);
+        } catch (error) {
+          console.error('Logout error:', error);
+        }
         setUser(null);
         setIsAuthenticated(false);
         if (cleanupTimerRef.current) {
@@ -109,16 +120,18 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       const response = await axios.post('/auth/login', { username, password });
-      const { token, user } = response.data;
       
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      setUser(user);
-      setIsAuthenticated(true);
-      
-      return { success: true };
+      if (response.data && response.data.success && response.data.user) {
+        // Session is stored in HTTP-only cookie, no need to store anything client-side
+        setUser(response.data.user);
+        setIsAuthenticated(true);
+        return { success: true };
+      } else {
+        return { 
+          success: false, 
+          message: 'Login failed. Invalid response from server.' 
+        };
+      }
     } catch (error) {
       return { 
         success: false, 
@@ -127,12 +140,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    delete axios.defaults.headers.common['Authorization'];
-    setUser(null);
-    setIsAuthenticated(false);
+  const logout = async () => {
+    try {
+      // Call logout endpoint to destroy session on server
+      await axios.post('/auth/logout').catch(console.error);
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear local state regardless of server response
+      setUser(null);
+      setIsAuthenticated(false);
+    }
   };
 
   const value = {
