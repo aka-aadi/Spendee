@@ -147,7 +147,20 @@ const Dashboard = () => {
 
       setLoading(false);
     } catch (err) {
-      setError('Failed to load dashboard data');
+      console.error('Dashboard fetch error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      // Handle authentication errors
+      if (err.response?.status === 401) {
+        setError('Session expired. Please login again.');
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        setError(err.response?.data?.message || 'Failed to load dashboard data');
+      }
       setLoading(false);
     }
   };
