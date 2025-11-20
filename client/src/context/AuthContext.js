@@ -18,17 +18,42 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://spendee-qkf8.onrender.
 // Configure axios defaults
 axios.defaults.baseURL = API_URL;
 
-// Session ID stored in memory (not persisted to localStorage for security)
-let sessionIdRef = null;
+// Session ID stored in sessionStorage (persists across page refreshes, cleared when tab closes)
+// This is more secure than localStorage as it's cleared when the browser tab closes
+const getSessionId = () => {
+  try {
+    return sessionStorage.getItem('spentee_session_id');
+  } catch (e) {
+    return null;
+  }
+};
+
+const setSessionId = (sessionId) => {
+  try {
+    if (sessionId) {
+      sessionStorage.setItem('spentee_session_id', sessionId);
+    } else {
+      sessionStorage.removeItem('spentee_session_id');
+    }
+  } catch (e) {
+    console.error('Error accessing sessionStorage:', e);
+  }
+};
+
+let sessionIdRef = getSessionId(); // Initialize from sessionStorage
 
 // Add request interceptor to include session ID in headers
 axios.interceptors.request.use(
   (config) => {
+    // Get current session ID (may have been updated)
+    const currentSessionId = getSessionId();
     // Add session ID to headers if available (works for both web and mobile)
-    if (sessionIdRef) {
-      config.headers['x-session-id'] = sessionIdRef;
-      console.log('Adding session ID to request:', sessionIdRef, 'URL:', config.url);
+    if (currentSessionId) {
+      config.headers['x-session-id'] = currentSessionId;
+      sessionIdRef = currentSessionId; // Keep in sync
+      console.log('Adding session ID to request:', currentSessionId, 'URL:', config.url);
     } else {
+      sessionIdRef = null;
       console.log('No session ID available for request:', config.url);
     }
     return config;
@@ -44,6 +69,7 @@ axios.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       // Session expired or invalid - clear auth state
+      setSessionId(null);
       sessionIdRef = null;
       // This will be handled by the component using the context
       console.log('Session expired or invalid');
@@ -59,13 +85,50 @@ export const AuthProvider = ({ children }) => {
   const cleanupTimerRef = useRef(null);
 
   useEffect(() => {
-    // Don't check auth status on mount - require fresh login
-    // This ensures no tokens/session IDs are persisted
-    // User must login each time (session ID is in memory only)
-    setLoading(false);
-    
-    // Initialize admin user
-    axios.post('/auth/init').catch(console.error);
+    const checkAuthStatus = async () => {
+      // Check if we have a session ID from sessionStorage
+      const storedSessionId = getSessionId();
+      
+      if (storedSessionId) {
+        // We have a session ID, validate it with the server
+        try {
+          // Set it temporarily for this request
+          sessionIdRef = storedSessionId;
+          const response = await axios.get('/auth/me');
+          
+          if (response.data && response.data.user) {
+            // Session is valid, restore user state
+            setUser(response.data.user);
+            setIsAuthenticated(true);
+            console.log('Session restored from sessionStorage');
+          } else {
+            // Session invalid, clear it
+            setSessionId(null);
+            sessionIdRef = null;
+            setIsAuthenticated(false);
+            setUser(null);
+          }
+        } catch (error) {
+          // Session invalid or expired, clear it
+          console.log('Session validation failed:', error.response?.status);
+          setSessionId(null);
+          sessionIdRef = null;
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      } else {
+        // No session ID, user needs to login
+        setIsAuthenticated(false);
+        setUser(null);
+      }
+      
+      setLoading(false);
+      
+      // Initialize admin user
+      axios.post('/auth/init').catch(console.error);
+    };
+
+    checkAuthStatus();
   }, []);
 
   // Setup inactivity timer (30 minutes)
@@ -92,6 +155,9 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
           console.error('Logout error:', error);
         }
+        // Clear session ID
+        setSessionId(null);
+        sessionIdRef = null;
         setUser(null);
         setIsAuthenticated(false);
         if (cleanupTimerRef.current) {
@@ -128,9 +194,11 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.post('/auth/login', { username, password });
       
       if (response.data && response.data.success && response.data.user) {
-        // Store session ID in memory (not persisted - same approach as mobile)
-        sessionIdRef = response.data.sessionId;
-        console.log('Session ID stored:', sessionIdRef);
+        // Store session ID in sessionStorage (persists across page refreshes)
+        const sessionId = response.data.sessionId;
+        setSessionId(sessionId);
+        sessionIdRef = sessionId;
+        console.log('Session ID stored:', sessionId);
         
         setUser(response.data.user);
         setIsAuthenticated(true);
@@ -158,7 +226,8 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear session ID from memory
+      // Clear session ID from sessionStorage and memory
+      setSessionId(null);
       sessionIdRef = null;
       // Clear local state regardless of server response
       setUser(null);
