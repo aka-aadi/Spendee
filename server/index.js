@@ -124,6 +124,7 @@ app.use('/api/income', require('./routes/income'));
 app.use('/api/budgets', require('./routes/budgets'));
 app.use('/api/emis', require('./routes/emis'));
 app.use('/api/upi', require('./routes/upi'));
+app.use('/api/savings', require('./routes/savings'));
 app.use('/api/financial', require('./routes/financial'));
 
 // Health check

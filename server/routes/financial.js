@@ -6,6 +6,7 @@ const Income = require('../models/Income');
 const Budget = require('../models/Budget');
 const EMI = require('../models/EMI');
 const UPIPayment = require('../models/UPIPayment');
+const Saving = require('../models/Saving');
 
 // Get comprehensive financial summary
 router.get('/summary', authenticate, async (req, res) => {
@@ -23,7 +24,7 @@ router.get('/summary', authenticate, async (req, res) => {
     // Fetch all data in parallel with optimized queries
     // Use .lean() for read-only queries (faster, returns plain objects)
     // Use .select() to only fetch needed fields
-    const [expenses, income, budgets, emis, upiPayments] = await Promise.all([
+    const [expenses, income, budgets, emis, upiPayments, savings] = await Promise.all([
       Expense.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
@@ -58,6 +59,13 @@ router.get('/summary', authenticate, async (req, res) => {
         .catch(err => {
           console.error('Error fetching UPI payments:', err);
           throw err;
+        }),
+      Saving.find({ ...query, ...dateQuery })
+        .lean()
+        .sort({ date: -1 })
+        .catch(err => {
+          console.error('Error fetching savings:', err);
+          throw err;
         })
     ]);
 
@@ -69,6 +77,7 @@ router.get('/summary', authenticate, async (req, res) => {
     const totalUPI = upiPayments
       .filter(upi => upi.status === 'Success')
       .reduce((sum, upi) => sum + upi.amount, 0);
+    const totalSavings = savings.reduce((sum, saving) => sum + saving.amount, 0);
     
     // Calculate EMIs - only count active EMIs that have started (current month >= nextDueDate month)
     const now = new Date();
@@ -113,8 +122,8 @@ router.get('/summary', authenticate, async (req, res) => {
     // Calculate total expenses (expenses + down payments + EMIs + UPI payments)
     const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI;
     
-    // Calculate remaining balance (deduct down payments that have been paid)
-    const availableBalance = totalIncome - totalExpenses - totalEMI - totalDownPayments - totalUPI;
+    // Calculate remaining balance (deduct down payments, savings, and all expenses)
+    const availableBalance = totalIncome - totalExpenses - totalEMI - totalDownPayments - totalUPI - totalSavings;
 
     // Use aggregation for faster category calculations
     const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
@@ -184,6 +193,11 @@ router.get('/summary', authenticate, async (req, res) => {
         count: budgets.length,
         items: budgets
       },
+      savings: {
+        total: totalSavings,
+        count: savings.length,
+        items: savings
+      },
       balance: {
         available: availableBalance,
         availableBalance: availableBalance,
@@ -192,6 +206,7 @@ router.get('/summary', authenticate, async (req, res) => {
         totalEMI,
         totalDownPayments,
         totalUPI,
+        totalSavings,
         totalAllExpenses, // Total expenses including all components
         remainingAfterExpenses: totalIncome - totalExpenses - totalEMI, // Net savings after EMIs
         remainingAfterAll: availableBalance
