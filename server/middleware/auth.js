@@ -8,16 +8,26 @@ const authenticate = async (req, res, next) => {
     // Check for session ID in custom header (for React Native)
     if (req.headers['x-session-id']) {
       sessionId = req.headers['x-session-id'];
+      console.log('Authenticating with session ID:', sessionId);
       
       // Load session by ID using promise
       const session = await new Promise((resolve, reject) => {
         req.sessionStore.get(sessionId, (err, session) => {
-          if (err) reject(err);
-          else resolve(session);
+          if (err) {
+            console.error('Session store get error:', err);
+            reject(err);
+          } else {
+            console.log('Session retrieved:', session ? 'found' : 'not found');
+            if (session) {
+              console.log('Session userId:', session.userId);
+            }
+            resolve(session);
+          }
         });
       });
 
       if (!session || !session.userId) {
+        console.log('Session invalid or missing userId');
         return res.status(401).json({ message: 'Not authenticated. Please login again.' });
       }
 
@@ -29,6 +39,7 @@ const authenticate = async (req, res, next) => {
       const user = await User.findById(session.userId).select('-password');
       
       if (!user) {
+        console.log('User not found for session userId:', session.userId);
         // User was deleted but session still exists - destroy session
         await new Promise((resolve) => {
           req.sessionStore.destroy(sessionId, resolve);
@@ -38,6 +49,7 @@ const authenticate = async (req, res, next) => {
 
       // Attach user to request object
       req.user = user;
+      console.log('Authentication successful for user:', user.username);
       next();
     } else {
       // Cookie-based session (web)
@@ -60,6 +72,7 @@ const authenticate = async (req, res, next) => {
     }
   } catch (error) {
     console.error('Authentication error:', error);
+    console.error('Error stack:', error.stack);
     res.status(401).json({ message: 'Authentication failed. Please login again.' });
   }
 };
