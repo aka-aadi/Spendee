@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
 import Chart from 'react-apexcharts';
-import { FiTrendingUp, FiTrendingDown, FiCreditCard, FiDollarSign, FiPlus, FiX, FiSmartphone } from 'react-icons/fi';
+import { FiTrendingUp, FiTrendingDown, FiCreditCard, FiDollarSign, FiPlus, FiX, FiSmartphone, FiSave } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Dashboard.css';
@@ -627,6 +627,20 @@ const Dashboard = () => {
               <span className="stat-subtitle">Includes expenses, EMIs, down payments & UPI</span>
             </div>
           </motion.div>
+
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="stat-card savings"
+          >
+            <div className="stat-icon">
+              <FiSave />
+            </div>
+            <div className="stat-content">
+              <h3>Total Savings</h3>
+              <p className="stat-value">₹{(stats.totalSavings || 0).toLocaleString()}</p>
+              <span className="stat-subtitle">Transfers to savings this month</span>
+            </div>
+          </motion.div>
         </div>
       </div>
 
@@ -778,6 +792,16 @@ const Dashboard = () => {
                 className="fab-menu-item"
               >
                 <FiTrendingUp /> Add Income
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/savings');
+                  setShowAddMenu(false);
+                }}
+                className="fab-menu-item"
+                style={{ color: '#3b82f6' }}
+              >
+                <FiSave /> Add to Savings
               </button>
               <button
                 onClick={() => {

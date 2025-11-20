@@ -14,7 +14,8 @@ import {
   FiX,
   FiLogOut,
   FiList,
-  FiAlertCircle
+  FiAlertCircle,
+  FiSave
 } from 'react-icons/fi';
 import './Sidebar.css';
 
@@ -29,6 +30,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     { path: '/transactions', icon: FiList, label: 'Transactions' },
     { path: '/expenses', icon: FiDollarSign, label: 'Expenses' },
     { path: '/income', icon: FiTrendingUp, label: 'Income' },
+    { path: '/savings', icon: FiSave, label: 'Savings' },
     { path: '/budgets', icon: FiTarget, label: 'Budgets' },
     { path: '/emis', icon: FiCreditCard, label: 'EMIs' },
     { path: '/upi', icon: FiSmartphone, label: 'UPI Payments' },

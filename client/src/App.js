@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Expenses from './components/Expenses';
 import Income from './components/Income';
+import Savings from './components/Savings';
 import Budgets from './components/Budgets';
 import EMIs from './components/EMIs';
 import UPIPayments from './components/UPIPayments';
@@ -55,6 +56,7 @@ const AppContent = () => {
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/expenses" element={<Expenses />} />
                     <Route path="/income" element={<Income />} />
+                    <Route path="/savings" element={<Savings />} />
                     <Route path="/budgets" element={<Budgets />} />
                     <Route path="/emis" element={<EMIs />} />
                     <Route path="/upi" element={<UPIPayments />} />
