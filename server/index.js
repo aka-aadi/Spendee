@@ -39,7 +39,8 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
     httpOnly: true, // Prevent client-side JavaScript access
     maxAge: sessionMaxAge,
-    sameSite: 'lax' // CSRF protection
+    sameSite: 'none', // Allow cross-origin cookies (required for different domains)
+    domain: undefined // Don't restrict domain - let browser handle it
   },
   name: 'spentee.sid' // Custom session name
 }));
