@@ -582,11 +582,16 @@ const Dashboard = () => {
             ₹{availableBalance.toLocaleString()}
           </div>
           <div className="summary-detail">
-            After all expenses, EMIs, and down payments (per EMI settings)
+            After all expenses, EMIs, down payments, and savings (per EMI settings)
             {stats.hasExcludedDownPayments && (
               <span className="downpayment-note">
                 {' '}(Some EMIs exclude down payments)
               </span>
+            )}
+            {stats.totalSavings > 0 && (
+              <div style={{ marginTop: '8px', fontSize: '14px', color: '#3b82f6', fontWeight: '600' }}>
+                Total Savings: ₹{stats.totalSavings.toLocaleString()}
+              </div>
             )}
           </div>
         </motion.div>
