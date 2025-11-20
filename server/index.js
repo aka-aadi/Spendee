@@ -2,16 +2,14 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 
 dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Database connection
+// Database connection - must be established before session store
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
@@ -21,6 +19,39 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+// Session configuration
+const sessionSecret = process.env.SESSION_SECRET || 'your-session-secret-change-in-production';
+const sessionMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
+// Create session store with MongoDB connection
+const sessionStore = MongoStore.create({
+  mongoUrl: MONGODB_URI,
+  ttl: sessionMaxAge / 1000, // TTL in seconds
+  touchAfter: 24 * 3600 // lazy session update (24 hours)
+});
+
+app.use(session({
+  secret: sessionSecret,
+  resave: false,
+  saveUninitialized: false,
+  store: sessionStore,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
+    httpOnly: true, // Prevent client-side JavaScript access
+    maxAge: sessionMaxAge,
+    sameSite: 'lax' // CSRF protection
+  },
+  name: 'spentee.sid' // Custom session name
+}));
+
+// Middleware
+app.use(cors({
+  origin: true,
+  credentials: true // Allow cookies to be sent
+}));
+app.use(express.json());
+
+// Connect to MongoDB
 mongoose.connect(MONGODB_URI)
 .then(async () => {
   console.log('MongoDB connected successfully');

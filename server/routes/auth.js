@@ -1,9 +1,6 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const router = express.Router();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Initialize admin user
 router.post('/init', async (req, res) => {
@@ -39,10 +36,14 @@ router.post('/init', async (req, res) => {
   }
 });
 
-// Login
+// Login - creates server-side session
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
 
     const user = await User.findOne({ username });
     if (!user) {
@@ -54,14 +55,102 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign(
-      { userId: user._id, username: user.username, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Create session
+    req.session.userId = user._id.toString();
+    req.session.username = user.username;
+    req.session.role = user.role;
+
+    // Get session ID before save (it should be available)
+    const sessionId = req.sessionID;
+    console.log('Session ID before save:', sessionId);
+
+    // Save session using promise
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          reject(err);
+        } else {
+          console.log('Session saved successfully, ID:', req.sessionID);
+          resolve();
+        }
+      });
+    });
+
+    // Verify session ID after save
+    const finalSessionId = req.sessionID || sessionId;
+    console.log('Final session ID:', finalSessionId);
+
+    if (!finalSessionId) {
+      console.error('ERROR: Session ID is missing after save');
+      return res.status(500).json({ 
+        message: 'Error creating session: Session ID not generated',
+        success: false
+      });
+    }
+
+    // Return session ID for React Native (since cookies don't work well)
+    // Session ID is just an identifier, actual session data stays on server
+    res.json({
+      success: true,
+      sessionId: finalSessionId,
+      user: {
+        id: user._id.toString(),
+        username: user.username,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Error logging in', error: error.message });
+  }
+});
+
+// Logout - destroys session
+router.post('/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('Session destroy error:', err);
+      return res.status(500).json({ message: 'Error logging out', error: err.message });
+    }
+    res.clearCookie('spentee.sid');
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+});
+
+// Check authentication status
+router.get('/me', async (req, res) => {
+  try {
+    let session = req.session;
+    
+    // Support session ID header for React Native
+    if (req.headers['x-session-id'] && !session?.userId) {
+      const sessionId = req.headers['x-session-id'];
+      session = await new Promise((resolve, reject) => {
+        req.sessionStore.get(sessionId, (err, sess) => {
+          if (err) reject(err);
+          else resolve(sess);
+        });
+      });
+    }
+
+    if (!session || !session.userId) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const user = await User.findById(session.userId).select('-password');
+    if (!user) {
+      if (req.headers['x-session-id']) {
+        await new Promise((resolve) => {
+          req.sessionStore.destroy(req.headers['x-session-id'], resolve);
+        });
+      } else {
+        req.session.destroy();
+      }
+      return res.status(401).json({ message: 'User not found' });
+    }
 
     res.json({
-      token,
       user: {
         id: user._id,
         username: user.username,
@@ -69,7 +158,8 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ message: 'Error logging in', error: error.message });
+    console.error('Auth check error:', error);
+    res.status(500).json({ message: 'Error checking authentication', error: error.message });
   }
 });
 
