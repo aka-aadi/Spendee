@@ -36,10 +36,10 @@ app.use(session({
   saveUninitialized: false,
   store: sessionStore,
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
+    secure: true, // REQUIRED when sameSite is 'none' - must be true for cross-origin cookies
     httpOnly: true, // Prevent client-side JavaScript access
     maxAge: sessionMaxAge,
-    sameSite: 'none', // Allow cross-origin cookies (required for different domains)
+    sameSite: 'none', // Allow cross-origin cookies (required when client and server are on different domains)
     domain: undefined // Don't restrict domain - let browser handle it
   },
   name: 'spentee.sid' // Custom session name
