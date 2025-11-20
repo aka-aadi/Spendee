@@ -14,7 +14,14 @@ router.get('/', authenticate, async (req, res) => {
     const emis = await EMI.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ createdAt: -1 });
-    res.json(emis);
+    
+    // Ensure paidMonthDates is always an array (lean() might not apply defaults)
+    const emisWithDefaults = emis.map(emi => ({
+      ...emi,
+      paidMonthDates: Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : []
+    }));
+    
+    res.json(emisWithDefaults);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching EMIs', error: error.message });
   }
