@@ -54,33 +54,49 @@ const Dashboard = () => {
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-      // Get comprehensive financial summary
+      // Get comprehensive financial summary for current month (for monthly stats)
       const financialSummary = await axios.get('/financial/summary', {
         params: { startDate: firstDay.toISOString(), endDate: lastDay.toISOString() }
       });
 
+      // Get ALL data for cumulative balance and proper monthly calculations
+      const allDataSummary = await axios.get('/financial/summary');
+
       const { income, expenses, emis, balance, savings } = financialSummary.data;
+      const { income: allIncome, expenses: allExpenses, emis: allEMIs, savings: allSavings } = allDataSummary.data;
 
       // Check if any EMI excludes down payment from balance
       const hasExcludedDownPayments = emis.items.some(emi => 
         emi.includeDownPaymentInBalance === false
       );
 
-      setStats({
-        totalIncome: income.total,
-        totalExpenses: expenses.totalAll || expenses.total,
-        activeEMIs: emis.count,
-        monthlyIncome: income.total,
-        monthlyExpenses: expenses.totalAll || expenses.total,
-        monthlyEMI: emis.totalMonthly,
-        totalDownPayments: balance.totalDownPayments || 0,
-        totalUPI: balance.totalUPI || 0,
-        totalSavings: savings?.total || 0,
-        availableBalance: balance.availableBalance || 0,
-        remainingAfterExpenses: balance.remainingAfterExpenses,
-        hasExcludedDownPayments,
-        nextUpcomingEMI: emis.items.length > 0 ? emis.items[0] : null,
-      });
+        // Calculate current month's paid EMI (only count EMIs paid this month)
+        const currentMonthPaidEMI = emis.items.reduce((sum, emi) => {
+          const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
+          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+          const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          const paymentsThisMonth = paidMonthDates.filter(paidDate => {
+            const paid = new Date(paidDate);
+            return paid >= firstDay && paid <= lastDay;
+          }).length;
+          return sum + (paymentsThisMonth * emi.monthlyEMI);
+        }, 0);
+
+        setStats({
+          totalIncome: income.total,
+          totalExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0), // Only include paid EMIs
+          activeEMIs: emis.count,
+          monthlyIncome: income.total,
+          monthlyExpenses: expenses.total + currentMonthPaidEMI + (balance.totalUPI || 0) + (savings?.total || 0),
+          monthlyEMI: currentMonthPaidEMI, // Only paid EMIs
+          totalDownPayments: balance.totalDownPayments || 0,
+          totalUPI: balance.totalUPI || 0,
+          totalSavings: savings?.total || 0,
+          availableBalance: allDataSummary.data.balance.availableBalance || 0, // Use cumulative balance
+          remainingAfterExpenses: balance.remainingAfterExpenses,
+          hasExcludedDownPayments,
+          nextUpcomingEMI: emis.items.length > 0 ? emis.items[0] : null,
+        });
 
       // Include EMI in expenses by category (backend already adds it)
       const categoryData = Object.entries(expenses.byCategory || {}).map(([name, value]) => ({
@@ -89,9 +105,9 @@ const Dashboard = () => {
       })).sort((a, b) => b.value - a.value);
       setExpensesByCategory(categoryData);
 
-      // Fetch UPI payments for monthly calculation
+      // Fetch ALL UPI payments for monthly calculation (not just current month)
       const upiResponse = await axios.get('/upi');
-      const upiPayments = upiResponse.data.filter(upi => upi.status === 'Success');
+      const allUPIPayments = upiResponse.data.filter(upi => upi.status === 'Success');
 
       // Generate monthly chart data (last 6 months)
       const monthlyChartData = [];
@@ -99,37 +115,45 @@ const Dashboard = () => {
         const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
         
-        const monthExpenses = expenses.items.filter(exp => {
+        // Calculate income for this month (from all income data)
+        const monthIncome = allIncome.items.filter(inc => {
+          const incDate = new Date(inc.date);
+          return incDate >= month && incDate <= monthEnd;
+        }).reduce((sum, inc) => sum + inc.amount, 0);
+
+        // Calculate expenses for this month (from all expenses data)
+        const monthExpenses = allExpenses.items.filter(exp => {
           const expDate = new Date(exp.date);
           return expDate >= month && expDate <= monthEnd;
         }).reduce((sum, exp) => sum + exp.amount, 0);
 
         // Calculate UPI payments for this month
-        const monthUPI = upiPayments.filter(upi => {
+        const monthUPI = allUPIPayments.filter(upi => {
           const upiDate = new Date(upi.date);
           return upiDate >= month && upiDate <= monthEnd;
         }).reduce((sum, upi) => sum + upi.amount, 0);
 
         // Calculate down payments for this month
-        const monthDownPayments = emis.items.filter(emi => {
+        const monthDownPayments = allEMIs.items.filter(emi => {
           const emiStartDate = new Date(emi.startDate);
           return emiStartDate >= month && emiStartDate <= monthEnd && 
                  (emi.includeDownPaymentInBalance !== false) && 
                  (emi.downPayment || 0) > 0;
         }).reduce((sum, emi) => sum + (emi.downPayment || 0), 0);
 
-        // Calculate EMI for this month (EMIs due in this month)
-        const monthEMI = emis.items.filter(emi => {
-          const emiDueDate = new Date(emi.nextDueDate);
-          return emiDueDate >= month && emiDueDate <= monthEnd;
-        }).reduce((sum, emi) => sum + emi.monthlyEMI, 0);
+        // Calculate EMI for this month (only count EMIs that were PAID in this month)
+        const monthEMI = allEMIs.items.reduce((sum, emi) => {
+          const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
+          // Count how many payments were made in this month
+          const paymentsInMonth = paidMonthDates.filter(paidDate => {
+            const paid = new Date(paidDate);
+            return paid >= month && paid <= monthEnd;
+          }).length;
+          return sum + (paymentsInMonth * emi.monthlyEMI);
+        }, 0);
 
-        const monthIncome = income.items.filter(inc => {
-          const incDate = new Date(inc.date);
-          return incDate >= month && incDate <= monthEnd;
-        }).reduce((sum, inc) => sum + inc.amount, 0);
-
-        const monthSavings = savings?.items?.filter(saving => {
+        // Calculate savings for this month
+        const monthSavings = allSavings?.items?.filter(saving => {
           const savingDate = new Date(saving.date);
           return savingDate >= month && savingDate <= monthEnd;
         }).reduce((sum, saving) => sum + saving.amount, 0) || 0;
@@ -555,6 +579,10 @@ const Dashboard = () => {
     {
       name: 'Down Payments',
       data: monthlyData.map(d => d.downPayments)
+    },
+    {
+      name: 'Savings',
+      data: monthlyData.map(d => d.savings)
     }
   ];
 

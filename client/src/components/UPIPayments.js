@@ -6,10 +6,13 @@ import { FiPlus, FiTrash2, FiEdit2, FiX, FiSmartphone } from 'react-icons/fi';
 import './UPIPayments.css';
 
 const UPIPayments = () => {
+  const [allUPIPayments, setAllUPIPayments] = useState([]);
   const [upiPayments, setUpiPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
   const [formData, setFormData] = useState({
     amount: '',
     upiApp: 'Google Pay',
@@ -26,15 +29,61 @@ const UPIPayments = () => {
     fetchUPIPayments();
   }, []);
 
+  useEffect(() => {
+    filterUPIPayments();
+  }, [allUPIPayments, selectedMonth, selectedYear]);
+
   const fetchUPIPayments = async () => {
     try {
       const response = await axios.get('/upi');
-      setUpiPayments(response.data);
+      setAllUPIPayments(response.data);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching UPI payments:', error);
       setLoading(false);
     }
+  };
+
+  const filterUPIPayments = () => {
+    let filtered = [...allUPIPayments];
+    
+    if (selectedMonth && selectedYear) {
+      filtered = filtered.filter(payment => {
+        const paymentDate = new Date(payment.date);
+        return paymentDate.getMonth() === parseInt(selectedMonth) && 
+               paymentDate.getFullYear() === parseInt(selectedYear);
+      });
+    }
+    
+    setUpiPayments(filtered);
+  };
+
+  const getMonthYearOptions = () => {
+    const now = new Date();
+    const months = [
+      { value: '', label: 'All Months' },
+      { value: '0', label: 'January' },
+      { value: '1', label: 'February' },
+      { value: '2', label: 'March' },
+      { value: '3', label: 'April' },
+      { value: '4', label: 'May' },
+      { value: '5', label: 'June' },
+      { value: '6', label: 'July' },
+      { value: '7', label: 'August' },
+      { value: '8', label: 'September' },
+      { value: '9', label: 'October' },
+      { value: '10', label: 'November' },
+      { value: '11', label: 'December' }
+    ];
+    
+    const years = [];
+    const currentYear = now.getFullYear();
+    for (let i = currentYear; i >= currentYear - 5; i--) {
+      years.push({ value: i.toString(), label: i.toString() });
+    }
+    years.unshift({ value: '', label: 'All Years' });
+    
+    return { months, years };
   };
 
   const handleSubmit = async (e) => {
@@ -113,17 +162,37 @@ const UPIPayments = () => {
     >
       <div className="page-header">
         <h1 className="page-title">UPI Payments</h1>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="add-button"
-        >
-          <FiPlus /> Add UPI Payment
-        </motion.button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
+          >
+            {getMonthYearOptions().months.map(month => (
+              <option key={month.value} value={month.value}>{month.label}</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
+          >
+            {getMonthYearOptions().years.map(year => (
+              <option key={year.value} value={year.value}>{year.label}</option>
+            ))}
+          </select>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="add-button"
+          >
+            <FiPlus /> Add UPI Payment
+          </motion.button>
+        </div>
       </div>
 
       <div className="summary-card">

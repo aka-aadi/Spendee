@@ -6,10 +6,13 @@ import { FiPlus, FiTrash2, FiEdit2, FiX } from 'react-icons/fi';
 import './Expenses.css';
 
 const Expenses = () => {
+  const [allExpenses, setAllExpenses] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
   const [formData, setFormData] = useState({
     amount: '',
     category: 'Food',
@@ -22,15 +25,61 @@ const Expenses = () => {
     fetchExpenses();
   }, []);
 
+  useEffect(() => {
+    filterExpenses();
+  }, [allExpenses, selectedMonth, selectedYear]);
+
   const fetchExpenses = async () => {
     try {
       const response = await axios.get('/expenses');
-      setExpenses(response.data);
+      setAllExpenses(response.data);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching expenses:', error);
       setLoading(false);
     }
+  };
+
+  const filterExpenses = () => {
+    let filtered = [...allExpenses];
+    
+    if (selectedMonth && selectedYear) {
+      filtered = filtered.filter(expense => {
+        const expenseDate = new Date(expense.date);
+        return expenseDate.getMonth() === parseInt(selectedMonth) && 
+               expenseDate.getFullYear() === parseInt(selectedYear);
+      });
+    }
+    
+    setExpenses(filtered);
+  };
+
+  const getMonthYearOptions = () => {
+    const now = new Date();
+    const months = [
+      { value: '', label: 'All Months' },
+      { value: '0', label: 'January' },
+      { value: '1', label: 'February' },
+      { value: '2', label: 'March' },
+      { value: '3', label: 'April' },
+      { value: '4', label: 'May' },
+      { value: '5', label: 'June' },
+      { value: '6', label: 'July' },
+      { value: '7', label: 'August' },
+      { value: '8', label: 'September' },
+      { value: '9', label: 'October' },
+      { value: '10', label: 'November' },
+      { value: '11', label: 'December' }
+    ];
+    
+    const years = [];
+    const currentYear = now.getFullYear();
+    for (let i = currentYear; i >= currentYear - 5; i--) {
+      years.push({ value: i.toString(), label: i.toString() });
+    }
+    years.unshift({ value: '', label: 'All Years' });
+    
+    return { months, years };
   };
 
   const handleSubmit = async (e) => {
@@ -100,17 +149,37 @@ const Expenses = () => {
     >
       <div className="page-header">
         <h1 className="page-title">Expenses</h1>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="add-button"
-        >
-          <FiPlus /> Add Expense
-        </motion.button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
+          >
+            {getMonthYearOptions().months.map(month => (
+              <option key={month.value} value={month.value}>{month.label}</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff' }}
+          >
+            {getMonthYearOptions().years.map(year => (
+              <option key={year.value} value={year.value}>{year.label}</option>
+            ))}
+          </select>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="add-button"
+          >
+            <FiPlus /> Add Expense
+          </motion.button>
+        </div>
       </div>
 
       <div className="summary-card">

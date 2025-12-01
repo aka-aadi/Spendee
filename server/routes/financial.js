@@ -23,8 +23,15 @@ router.get('/summary', authenticate, async (req, res) => {
 
     // Fetch all data in parallel with optimized queries
     // Use .lean() for read-only queries (faster, returns plain objects)
-    // Use .select() to only fetch needed fields
-    const [expenses, income, budgets, emis, upiPayments, savings] = await Promise.all([
+    // For available balance calculation, we need ALL data (cumulative), not just date range
+    // But for monthly breakdown, we use date range
+    const [allExpenses, allIncome, allUPIPayments, allSavings, expenses, income, budgets, emis, upiPayments, savings] = await Promise.all([
+      // Fetch ALL data for cumulative balance calculation
+      Expense.find(query).lean().sort({ date: -1 }),
+      Income.find(query).lean().sort({ date: -1 }),
+      UPIPayment.find(query).lean().sort({ date: -1 }),
+      Saving.find(query).lean().sort({ date: -1 }),
+      // Fetch date-filtered data for monthly breakdown
       Expense.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
@@ -71,7 +78,7 @@ router.get('/summary', authenticate, async (req, res) => {
     ]);
 
 
-    // Calculate totals
+    // Calculate totals for date range (for monthly breakdown)
     const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
     const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     // Only count successful UPI payments
@@ -80,7 +87,15 @@ router.get('/summary', authenticate, async (req, res) => {
       .reduce((sum, upi) => sum + upi.amount, 0);
     const totalSavings = savings.reduce((sum, saving) => sum + saving.amount, 0);
     
-    // Calculate EMIs - only count active EMIs that have started (current month >= nextDueDate month)
+    // Calculate cumulative totals (from all time) for available balance
+    const cumulativeIncome = allIncome.reduce((sum, inc) => sum + inc.amount, 0);
+    const cumulativeExpenses = allExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const cumulativeUPI = allUPIPayments
+      .filter(upi => upi.status === 'Success')
+      .reduce((sum, upi) => sum + upi.amount, 0);
+    const cumulativeSavings = allSavings.reduce((sum, saving) => sum + saving.amount, 0);
+    
+    // Calculate EMIs - only count EMIs that are marked as paid
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -90,9 +105,7 @@ router.get('/summary', authenticate, async (req, res) => {
     
     emis.forEach(emi => {
       const emiStartDate = new Date(emi.startDate);
-      const nextDueDate = new Date(emi.nextDueDate);
-      const dueMonth = nextDueDate.getMonth();
-      const dueYear = nextDueDate.getFullYear();
+      const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
       
       // EMI starts from next month after start date
       // Count down payment if start date is today or in the past AND if it should be included
@@ -104,10 +117,9 @@ router.get('/summary', authenticate, async (req, res) => {
         totalDownPayments += (emi.downPayment || 0);
       }
       
-      // Only count monthly EMI if we're at or past the nextDueDate month
-      if (dueYear < currentYear || (dueYear === currentYear && dueMonth <= currentMonth)) {
-        totalEMI += emi.monthlyEMI;
-      }
+      // Only count EMI amounts for months that are marked as paid
+      // Count each paid month's EMI
+      totalEMI += (paidMonthDates.length * emi.monthlyEMI);
     });
     
     const totalBudget = budgets.reduce((sum, budget) => {
@@ -123,8 +135,9 @@ router.get('/summary', authenticate, async (req, res) => {
     // Calculate total expenses (expenses + down payments + EMIs + UPI payments + savings)
     const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI + totalSavings;
     
-    // Calculate remaining balance (deduct down payments, savings, and all expenses)
-    const availableBalance = totalIncome - totalExpenses - totalEMI - totalDownPayments - totalUPI - totalSavings;
+    // Calculate cumulative available balance (from all time, not just current month)
+    // This ensures balance carries over from previous months
+    const availableBalance = cumulativeIncome - cumulativeExpenses - totalEMI - totalDownPayments - cumulativeUPI - cumulativeSavings;
 
     // Use aggregation for faster category calculations
     const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
