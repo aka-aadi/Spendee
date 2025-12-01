@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -25,22 +25,7 @@ const Expenses = () => {
     fetchExpenses();
   }, []);
 
-  useEffect(() => {
-    filterExpenses();
-  }, [allExpenses, selectedMonth, selectedYear]);
-
-  const fetchExpenses = async () => {
-    try {
-      const response = await axios.get('/expenses');
-      setAllExpenses(response.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching expenses:', error);
-      setLoading(false);
-    }
-  };
-
-  const filterExpenses = () => {
+  const filterExpenses = useCallback(() => {
     let filtered = [...allExpenses];
     
     if (selectedMonth && selectedYear) {
@@ -52,6 +37,21 @@ const Expenses = () => {
     }
     
     setExpenses(filtered);
+  }, [allExpenses, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    filterExpenses();
+  }, [filterExpenses]);
+
+  const fetchExpenses = async () => {
+    try {
+      const response = await axios.get('/expenses');
+      setAllExpenses(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
+      setLoading(false);
+    }
   };
 
   const getMonthYearOptions = () => {

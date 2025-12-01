@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -25,22 +25,7 @@ const Income = () => {
     fetchIncome();
   }, []);
 
-  useEffect(() => {
-    filterIncome();
-  }, [allIncome, selectedMonth, selectedYear]);
-
-  const fetchIncome = async () => {
-    try {
-      const response = await axios.get('/income');
-      setAllIncome(response.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching income:', error);
-      setLoading(false);
-    }
-  };
-
-  const filterIncome = () => {
+  const filterIncome = useCallback(() => {
     let filtered = [...allIncome];
     
     if (selectedMonth && selectedYear) {
@@ -52,6 +37,21 @@ const Income = () => {
     }
     
     setIncome(filtered);
+  }, [allIncome, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    filterIncome();
+  }, [filterIncome]);
+
+  const fetchIncome = async () => {
+    try {
+      const response = await axios.get('/income');
+      setAllIncome(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching income:', error);
+      setLoading(false);
+    }
   };
 
   const getMonthYearOptions = () => {

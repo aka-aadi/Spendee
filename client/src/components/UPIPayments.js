@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -29,22 +29,7 @@ const UPIPayments = () => {
     fetchUPIPayments();
   }, []);
 
-  useEffect(() => {
-    filterUPIPayments();
-  }, [allUPIPayments, selectedMonth, selectedYear]);
-
-  const fetchUPIPayments = async () => {
-    try {
-      const response = await axios.get('/upi');
-      setAllUPIPayments(response.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching UPI payments:', error);
-      setLoading(false);
-    }
-  };
-
-  const filterUPIPayments = () => {
+  const filterUPIPayments = useCallback(() => {
     let filtered = [...allUPIPayments];
     
     if (selectedMonth && selectedYear) {
@@ -56,6 +41,21 @@ const UPIPayments = () => {
     }
     
     setUpiPayments(filtered);
+  }, [allUPIPayments, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    filterUPIPayments();
+  }, [filterUPIPayments]);
+
+  const fetchUPIPayments = async () => {
+    try {
+      const response = await axios.get('/upi');
+      setAllUPIPayments(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching UPI payments:', error);
+      setLoading(false);
+    }
   };
 
   const getMonthYearOptions = () => {
