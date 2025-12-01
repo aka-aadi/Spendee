@@ -27,73 +27,96 @@ router.get('/summary', authenticate, async (req, res) => {
     // But for monthly breakdown, we use date range
     const [allExpenses, allIncome, allUPIPayments, allSavings, expenses, income, budgets, emis, upiPayments, savings] = await Promise.all([
       // Fetch ALL data for cumulative balance calculation
-      Expense.find(query).lean().sort({ date: -1 }),
-      Income.find(query).lean().sort({ date: -1 }),
-      UPIPayment.find(query).lean().sort({ date: -1 }),
-      Saving.find(query).lean().sort({ date: -1 }),
+      Expense.find(query).lean().sort({ date: -1 }).catch(err => {
+        console.error('Error fetching all expenses:', err);
+        return [];
+      }),
+      Income.find(query).lean().sort({ date: -1 }).catch(err => {
+        console.error('Error fetching all income:', err);
+        return [];
+      }),
+      UPIPayment.find(query).lean().sort({ date: -1 }).catch(err => {
+        console.error('Error fetching all UPI payments:', err);
+        return [];
+      }),
+      Saving.find(query).lean().sort({ date: -1 }).catch(err => {
+        console.error('Error fetching all savings:', err);
+        return [];
+      }),
       // Fetch date-filtered data for monthly breakdown
       Expense.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
         .catch(err => {
           console.error('Error fetching expenses:', err);
-          throw err;
+          return [];
         }),
       Income.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
         .catch(err => {
           console.error('Error fetching income:', err);
-          throw err;
+          return [];
         }),
       Budget.find({ ...query, isActive: true })
         .lean()
         .sort({ createdAt: -1 })
         .catch(err => {
           console.error('Error fetching budgets:', err);
-          throw err;
+          return [];
         }),
       EMI.find({ ...query, isActive: true })
         .lean()
         .sort({ nextDueDate: 1 })
         .catch(err => {
           console.error('Error fetching EMIs:', err);
-          throw err;
+          return [];
         }),
       UPIPayment.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
         .catch(err => {
           console.error('Error fetching UPI payments:', err);
-          throw err;
+          return [];
         }),
       Saving.find({ ...query, ...dateQuery })
         .lean()
         .sort({ date: -1 })
         .catch(err => {
           console.error('Error fetching savings:', err);
-          // Return empty array instead of throwing to prevent server crash
           return [];
         })
     ]);
 
 
+    // Ensure all arrays are valid (handle null/undefined)
+    const safeIncome = Array.isArray(income) ? income : [];
+    const safeExpenses = Array.isArray(expenses) ? expenses : [];
+    const safeUPIPayments = Array.isArray(upiPayments) ? upiPayments : [];
+    const safeSavings = Array.isArray(savings) ? savings : [];
+    const safeAllIncome = Array.isArray(allIncome) ? allIncome : [];
+    const safeAllExpenses = Array.isArray(allExpenses) ? allExpenses : [];
+    const safeAllUPIPayments = Array.isArray(allUPIPayments) ? allUPIPayments : [];
+    const safeAllSavings = Array.isArray(allSavings) ? allSavings : [];
+    const safeEMIs = Array.isArray(emis) ? emis : [];
+    const safeBudgets = Array.isArray(budgets) ? budgets : [];
+
     // Calculate totals for date range (for monthly breakdown)
-    const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
-    const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const totalIncome = safeIncome.reduce((sum, inc) => sum + (inc?.amount || 0), 0);
+    const totalExpenses = safeExpenses.reduce((sum, exp) => sum + (exp?.amount || 0), 0);
     // Only count successful UPI payments
-    const totalUPI = upiPayments
-      .filter(upi => upi.status === 'Success')
-      .reduce((sum, upi) => sum + upi.amount, 0);
-    const totalSavings = savings.reduce((sum, saving) => sum + saving.amount, 0);
+    const totalUPI = safeUPIPayments
+      .filter(upi => upi?.status === 'Success')
+      .reduce((sum, upi) => sum + (upi?.amount || 0), 0);
+    const totalSavings = safeSavings.reduce((sum, saving) => sum + (saving?.amount || 0), 0);
     
     // Calculate cumulative totals (from all time) for available balance
-    const cumulativeIncome = allIncome.reduce((sum, inc) => sum + inc.amount, 0);
-    const cumulativeExpenses = allExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const cumulativeUPI = allUPIPayments
-      .filter(upi => upi.status === 'Success')
-      .reduce((sum, upi) => sum + upi.amount, 0);
-    const cumulativeSavings = allSavings.reduce((sum, saving) => sum + saving.amount, 0);
+    const cumulativeIncome = safeAllIncome.reduce((sum, inc) => sum + (inc?.amount || 0), 0);
+    const cumulativeExpenses = safeAllExpenses.reduce((sum, exp) => sum + (exp?.amount || 0), 0);
+    const cumulativeUPI = safeAllUPIPayments
+      .filter(upi => upi?.status === 'Success')
+      .reduce((sum, upi) => sum + (upi?.amount || 0), 0);
+    const cumulativeSavings = safeAllSavings.reduce((sum, saving) => sum + (saving?.amount || 0), 0);
     
     // Calculate EMIs - only count EMIs that are marked as paid
     const now = new Date();
@@ -103,33 +126,48 @@ router.get('/summary', authenticate, async (req, res) => {
     let totalEMI = 0;
     let totalDownPayments = 0;
     
-    emis.forEach(emi => {
-      const emiStartDate = new Date(emi.startDate);
-      const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
-      
-      // EMI starts from next month after start date
-      // Count down payment if start date is today or in the past AND if it should be included
-      const shouldIncludeDownPayment = emi.includeDownPaymentInBalance !== undefined 
-        ? emi.includeDownPaymentInBalance 
-        : true; // Default to true for backward compatibility
-      
-      if (emiStartDate <= now && shouldIncludeDownPayment) {
-        totalDownPayments += (emi.downPayment || 0);
+    safeEMIs.forEach(emi => {
+      if (!emi || !emi.startDate) return;
+      try {
+        const emiStartDate = new Date(emi.startDate);
+        if (isNaN(emiStartDate.getTime())) return;
+        
+        const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
+        
+        // EMI starts from next month after start date
+        // Count down payment if start date is today or in the past AND if it should be included
+        const shouldIncludeDownPayment = emi.includeDownPaymentInBalance !== undefined 
+          ? emi.includeDownPaymentInBalance 
+          : true; // Default to true for backward compatibility
+        
+        if (emiStartDate <= now && shouldIncludeDownPayment) {
+          totalDownPayments += (emi.downPayment || 0);
+        }
+        
+        // Only count EMI amounts for months that are marked as paid
+        // Count each paid month's EMI
+        const monthlyEMI = emi.monthlyEMI || 0;
+        totalEMI += (paidMonthDates.length * monthlyEMI);
+      } catch (err) {
+        console.error('Error processing EMI:', emi?._id, err);
       }
-      
-      // Only count EMI amounts for months that are marked as paid
-      // Count each paid month's EMI
-      totalEMI += (paidMonthDates.length * emi.monthlyEMI);
     });
     
-    const totalBudget = budgets.reduce((sum, budget) => {
-      const budgetExpenses = expenses.filter(exp => 
-        exp.category === budget.category &&
-        new Date(exp.date) >= budget.startDate &&
-        new Date(exp.date) <= budget.endDate
-      );
-      const spent = budgetExpenses.reduce((s, e) => s + e.amount, 0);
-      return sum + Math.max(0, budget.amount - spent);
+    const totalBudget = safeBudgets.reduce((sum, budget) => {
+      if (!budget || !budget.startDate || !budget.endDate) return sum;
+      try {
+        const budgetExpenses = safeExpenses.filter(exp => {
+          if (!exp || !exp.date) return false;
+          return exp.category === budget.category &&
+                 new Date(exp.date) >= new Date(budget.startDate) &&
+                 new Date(exp.date) <= new Date(budget.endDate);
+        });
+        const spent = budgetExpenses.reduce((s, e) => s + (e?.amount || 0), 0);
+        return sum + Math.max(0, (budget.amount || 0) - spent);
+      } catch (err) {
+        console.error('Error processing budget:', budget?._id, err);
+        return sum;
+      }
     }, 0);
 
     // Calculate total expenses (expenses + down payments + EMIs + UPI payments + savings)
@@ -190,32 +228,32 @@ router.get('/summary', authenticate, async (req, res) => {
     res.json({
       income: {
         total: totalIncome,
-        count: income.length,
+        count: safeIncome.length,
         byType: incomeByType,
-        items: income
+        items: safeIncome
       },
       expenses: {
         total: totalExpenses,
         totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, and UPI
-        count: expenses.length,
+        count: safeExpenses.length,
         byCategory: expensesByCategory,
-        items: expenses
+        items: safeExpenses
       },
       emis: {
         totalMonthly: totalEMI,
         totalDownPayments,
-        count: emis.length,
-        items: emis
+        count: safeEMIs.length,
+        items: safeEMIs
       },
       budgets: {
-        total: budgets.reduce((sum, b) => sum + b.amount, 0),
-        count: budgets.length,
-        items: budgets
+        total: safeBudgets.reduce((sum, b) => sum + (b?.amount || 0), 0),
+        count: safeBudgets.length,
+        items: safeBudgets
       },
       savings: {
         total: totalSavings,
-        count: savings.length,
-        items: savings
+        count: safeSavings.length,
+        items: safeSavings
       },
       balance: {
         available: availableBalance,
