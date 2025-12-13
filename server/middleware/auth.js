@@ -129,16 +129,16 @@ const authenticate = async (req, res, next) => {
 
       // Fetch user from database
       const user = await User.findById(req.session.userId).select('-password');
-      
-      if (!user) {
+    
+    if (!user) {
         // User was deleted but session still exists - destroy session
         req.session.destroy();
         return res.status(401).json({ message: 'User not found. Please login again.' });
-      }
+    }
 
       // Attach user to request object
-      req.user = user;
-      next();
+    req.user = user;
+    next();
     }
   } catch (error) {
     console.error('Authentication error:', error);

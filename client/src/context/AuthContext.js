@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }) => {
           if (response.data && response.data.user) {
             // Session is valid, restore user state
             setUser(response.data.user);
-            setIsAuthenticated(true);
+          setIsAuthenticated(true);
             console.log('Session restored from sessionStorage');
           } else {
             // Session invalid, clear it
@@ -199,10 +199,10 @@ export const AuthProvider = ({ children }) => {
         setSessionId(sessionId);
         sessionIdRef = sessionId;
         console.log('Session ID stored:', sessionId);
-        
+      
         setUser(response.data.user);
-        setIsAuthenticated(true);
-        return { success: true };
+      setIsAuthenticated(true);
+      return { success: true };
       } else {
         return { 
           success: false, 
@@ -230,8 +230,8 @@ export const AuthProvider = ({ children }) => {
       setSessionId(null);
       sessionIdRef = null;
       // Clear local state regardless of server response
-      setUser(null);
-      setIsAuthenticated(false);
+    setUser(null);
+    setIsAuthenticated(false);
     }
   };
 
