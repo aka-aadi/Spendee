@@ -4,59 +4,48 @@ Backend API server for the Spentee expense tracking application.
 
 ## 🚀 Features
 
-- User authentication with JWT
+- User authentication with email OTP verification
+- User registration and profile management
 - Expense tracking and management
 - Income tracking
 - Budget management
 - EMI (Equated Monthly Installment) tracking
 - UPI payment tracking
+- Savings tracking
 - Comprehensive financial summaries
+- Profile picture uploads
 
-## 📋 Prerequisites
+## 📋 Quick Start
 
-- Node.js >= 18.0.0
-- npm >= 9.0.0
-- MongoDB Atlas account (or local MongoDB instance)
+**👉 See [SETUP.md](./SETUP.md) for complete setup instructions.**
 
-## 🛠️ Installation
+### Quick Installation
 
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd spendee/server
-   ```
+```bash
+# Install dependencies
+npm install
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+# Create .env file (see SETUP.md for required variables)
+# Then start server
+npm run dev
+```
 
-3. **Set up environment variables:**
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and add your MongoDB connection string and JWT secret:
-   ```env
-   MONGODB_URI=your-mongodb-connection-string
-   JWT_SECRET=your-jwt-secret-key
-   PORT=5000
-   ```
+## 📚 Documentation
 
-4. **Run the server:**
-   ```bash
-   # Development mode (with auto-reload)
-   npm run dev
-   
-   # Production mode
-   npm start
-   ```
+- **[SETUP.md](./SETUP.md)** - Complete setup guide (environment variables, email configuration, deployment)
+- **[API Endpoints](#-api-endpoints)** - Available API endpoints below
 
 ## 📡 API Endpoints
 
 ### Authentication
 - `POST /api/auth/init` - Initialize admin user
-- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - Register new user (requires email verification)
+- `POST /api/auth/verify-email` - Verify email with OTP
+- `POST /api/auth/resend-otp` - Resend OTP
+- `POST /api/auth/login` - User login (username or email)
+- `POST /api/auth/logout` - Logout user
+- `GET /api/auth/me` - Get current user
+- `PUT /api/auth/profile` - Update user profile
 
 ### Expenses
 - `GET /api/expenses` - Get all expenses
@@ -98,25 +87,23 @@ Backend API server for the Spentee expense tracking application.
 ### Financial Summary
 - `GET /api/financial/summary` - Get comprehensive financial summary
 
+### Upload
+- `POST /api/upload/profile-picture` - Upload profile picture (base64)
+
 ### Health Check
 - `GET /api/health` - Server health check
 
 ## 🔐 Authentication
 
-Most endpoints require authentication. Include the JWT token in the Authorization header:
+The API uses session-based authentication. For React Native clients, include the session ID in the `x-session-id` header:
 
 ```
-Authorization: Bearer <your-jwt-token>
+x-session-id: <your-session-id>
 ```
 
-## 🌍 Environment Variables
+For web clients, sessions are managed via cookies automatically.
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `MONGODB_URI` | MongoDB connection string | Yes |
-| `JWT_SECRET` | Secret key for JWT tokens | Yes |
-| `PORT` | Server port (default: 5000) | No |
-| `NODE_ENV` | Environment (development/production) | No |
+**See [SETUP.md](./SETUP.md) for authentication setup details.**
 
 ## 📦 Project Structure
 
@@ -147,21 +134,16 @@ server/
 
 ## 🚀 Deployment
 
-This server is ready to deploy on:
-- **Render.com** (recommended - free tier available)
-- **Railway.app** (great free tier)
-- **Fly.io** (global edge network)
-- **Heroku** (paid, but very reliable)
-
-See the main `DEPLOYMENT_GUIDE.md` in the root directory for detailed deployment instructions.
+**👉 See [SETUP.md](./SETUP.md) for detailed deployment instructions to Render.com**
 
 ### Quick Deploy Checklist:
 
 1. ✅ Push code to GitHub
 2. ✅ Set up MongoDB Atlas cluster
-3. ✅ Create `.env` file with required variables (or use platform's environment variables)
-4. ✅ Deploy to your chosen platform
-5. ✅ Update mobile app with production API URL
+3. ✅ Configure SendGrid for email (see SETUP.md)
+4. ✅ Set environment variables in Render dashboard
+5. ✅ Deploy to Render.com
+6. ✅ Update mobile app with production API URL
 
 ## 🧪 Testing
 

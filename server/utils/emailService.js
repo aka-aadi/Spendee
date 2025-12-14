@@ -13,9 +13,14 @@ if (isSendGridConfigured) {
 const sendOTPEmail = async (email, otp) => {
   try {
     if (!isSendGridConfigured) {
-      console.warn('⚠️  SendGrid not configured. OTP for', email, ':', otp);
-      console.warn('Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL in .env');
-      return { success: false, message: 'Email service not configured' };
+      console.warn('\n⚠️  ============================================');
+      console.warn('⚠️  SENDGRID NOT CONFIGURED');
+      console.warn('⚠️  Missing environment variables:');
+      if (!process.env.SENDGRID_API_KEY) console.warn('⚠️    - SENDGRID_API_KEY');
+      if (!process.env.SENDGRID_FROM_EMAIL) console.warn('⚠️    - SENDGRID_FROM_EMAIL');
+      console.warn('⚠️  OTP for', email, ':', otp);
+      console.warn('⚠️  ============================================\n');
+      return { success: false, message: 'Email service not configured. Check server logs for OTP.' };
     }
 
     const fromEmail = process.env.SENDGRID_FROM_EMAIL;
@@ -86,11 +91,23 @@ const sendOTPEmail = async (email, otp) => {
     console.log('✅ OTP email sent successfully to:', email);
     return { success: true };
   } catch (error) {
-    console.error('❌ Error sending OTP email:', error);
+    console.error('\n❌ ============================================');
+    console.error('❌ ERROR SENDING OTP EMAIL');
+    console.error('❌ Email:', email);
+    console.error('❌ Error:', error.message);
     if (error.response) {
-      console.error('SendGrid error details:', error.response.body);
+      console.error('❌ SendGrid Status:', error.response.statusCode);
+      console.error('❌ SendGrid Error:', JSON.stringify(error.response.body, null, 2));
+      
+      // Common error messages
+      if (error.response.body?.errors) {
+        error.response.body.errors.forEach(err => {
+          console.error('❌   -', err.message);
+        });
+      }
     }
-    return { success: false, error: error.message };
+    console.error('❌ ============================================\n');
+    return { success: false, error: error.message, details: error.response?.body };
   }
 };
 
