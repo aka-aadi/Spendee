@@ -1,6 +1,7 @@
 const express = require('express');
 const User = require('../models/User');
 const crypto = require('crypto');
+const { sendOTPEmail } = require('../utils/emailService');
 const router = express.Router();
 
 // Initialize admin user
@@ -73,10 +74,14 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // Generate email verification token
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+    // Generate email verification token (for future use)
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Create new user
+    // Create new user (not verified yet)
     const user = new User({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
@@ -85,12 +90,84 @@ router.post('/register', async (req, res) => {
         fullName: fullName || ''
       },
       emailVerificationToken,
-      emailVerified: false // In production, require email verification
+      emailVerificationOTP: otp,
+      emailVerificationOTPExpiry: otpExpiry,
+      emailVerified: false
     });
 
     await user.save();
 
-    // Auto-login after registration (create session)
+    // Send OTP email
+    const emailResult = await sendOTPEmail(email.toLowerCase(), otp);
+    
+    // If email service is not configured, log OTP for development
+    if (!emailResult.success) {
+      console.log('⚠️  Email service not configured. OTP for', email, ':', otp);
+    }
+
+    // Don't auto-login - require email verification first
+    res.status(201).json({
+      success: true,
+      message: 'Account created. Please verify your email with the OTP sent to your email address.',
+      requiresVerification: true,
+      email: email.toLowerCase(), // Return email for OTP verification screen
+      // Log OTP for development (if email not configured)
+      ...(process.env.NODE_ENV === 'development' && !emailResult.success ? { devOTP: otp } : {}),
+      // Don't return sessionId or user - they need to verify first
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    if (error.code === 11000) {
+      // Duplicate key error
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field === 'username' ? 'Username' : 'Email'} already exists` 
+      });
+    }
+    res.status(500).json({ message: 'Error creating account', error: error.message });
+  }
+});
+
+// Verify email with OTP
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if already verified
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email already verified' });
+    }
+
+    // Check if OTP exists and matches
+    if (!user.emailVerificationOTP) {
+      return res.status(400).json({ message: 'No OTP found. Please request a new one.' });
+    }
+
+    if (user.emailVerificationOTP !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP. Please check and try again.' });
+    }
+
+    // Check if OTP expired
+    if (!user.emailVerificationOTPExpiry || new Date() > user.emailVerificationOTPExpiry) {
+      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Verify email
+    user.emailVerified = true;
+    user.emailVerificationOTP = null;
+    user.emailVerificationOTPExpiry = null;
+    await user.save();
+
+    // Auto-login after verification (create session)
     req.session.userId = user._id.toString();
     req.session.username = user.username;
     req.session.role = user.role;
@@ -104,9 +181,9 @@ router.post('/register', async (req, res) => {
 
     const sessionId = req.sessionID;
 
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Account created successfully',
+      message: 'Email verified successfully',
       sessionId: sessionId,
       user: {
         id: user._id.toString(),
@@ -119,15 +196,52 @@ router.post('/register', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    if (error.code === 11000) {
-      // Duplicate key error
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({ 
-        message: `${field === 'username' ? 'Username' : 'Email'} already exists` 
-      });
+    console.error('Email verification error:', error);
+    res.status(500).json({ message: 'Error verifying email', error: error.message });
+  }
+});
+
+// Resend OTP
+router.post('/resend-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
     }
-    res.status(500).json({ message: 'Error creating account', error: error.message });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ message: 'Email already verified' });
+    }
+
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    user.emailVerificationOTP = otp;
+    user.emailVerificationOTPExpiry = otpExpiry;
+    await user.save();
+
+    // Send OTP email
+    const emailResult = await sendOTPEmail(email.toLowerCase(), otp);
+    
+    // If email service is not configured, log OTP for development
+    if (!emailResult.success) {
+      console.log('⚠️  Email service not configured. New OTP for', email, ':', otp);
+    }
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully. Please check your email.'
+    });
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    res.status(500).json({ message: 'Error sending OTP', error: error.message });
   }
 });
 
