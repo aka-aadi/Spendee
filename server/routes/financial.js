@@ -13,8 +13,8 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // Admin users can see all data, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see only their own data
+    const query = { userId: req.user._id };
     
     console.log(`[FINANCIAL SUMMARY] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     

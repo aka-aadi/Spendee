@@ -6,11 +6,9 @@ const EMI = require('../models/EMI');
 // Get all EMIs
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all EMIs, regular users see only their own
+    // All users see only their own EMIs
     // Sort by creation date descending (newest first - reverse of added order)
-    const query = req.user.role === 'admin'
-      ? { isActive: true }
-      : { userId: req.user._id, isActive: true };
+    const query = { userId: req.user._id, isActive: true };
     
     console.log(`[EMI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -33,10 +31,8 @@ router.get('/', authenticate, async (req, res) => {
 // Get EMI by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any EMI, regular users see only their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users see only their own EMIs
+    const query = { _id: req.params.id, userId: req.user._id };
     const emi = await EMI.findOne(query);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
@@ -74,10 +70,8 @@ router.put('/:id', authenticate, async (req, res) => {
     // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any EMI, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only update their own EMIs
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[EMI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -98,10 +92,8 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete EMI
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any EMI, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only delete their own EMIs
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[EMI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -119,10 +111,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 // Mark EMI payment
 router.post('/:id/pay', authenticate, async (req, res) => {
   try {
-    // Admin users can mark payment for any EMI, regular users can only mark their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only mark payment for their own EMIs
+    const query = { _id: req.params.id, userId: req.user._id };
     const emi = await EMI.findOne(query);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
@@ -166,10 +156,8 @@ router.post('/:id/pay', authenticate, async (req, res) => {
 // Unmark EMI payment for current month
 router.post('/:id/unpay', authenticate, async (req, res) => {
   try {
-    // Admin users can unmark payment for any EMI, regular users can only unmark their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only unmark payment for their own EMIs
+    const query = { _id: req.params.id, userId: req.user._id };
     const emi = await EMI.findOne(query);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });

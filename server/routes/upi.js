@@ -6,8 +6,8 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all UPI payments
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all UPI payments, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see only their own UPI payments
+    const query = { userId: req.user._id };
     
     console.log(`[UPI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -31,10 +31,8 @@ router.get('/', authenticate, async (req, res) => {
 // Get UPI payment by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any UPI payment, regular users see only their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users see only their own UPI payments
+    const query = { _id: req.params.id, userId: req.user._id };
     const upiPayment = await UPIPayment.findOne(query);
     if (!upiPayment) {
       return res.status(404).json({ message: 'UPI payment not found' });
@@ -77,10 +75,8 @@ router.put('/:id', authenticate, async (req, res) => {
     // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any UPI payment, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only update their own UPI payments
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[UPI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -101,10 +97,8 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete UPI payment
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any UPI payment, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only delete their own UPI payments
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[UPI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -123,8 +117,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // Admin users can see all UPI payments, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see only their own UPI payments
+    const query = { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

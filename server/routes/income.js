@@ -6,8 +6,8 @@ const Income = require('../models/Income');
 // Get all income
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all income, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see only their own income
+    const query = { userId: req.user._id };
     
     console.log(`[INCOME GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -31,10 +31,8 @@ router.get('/', authenticate, async (req, res) => {
 // Get income by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any income, regular users see only their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users see only their own income
+    const query = { _id: req.params.id, userId: req.user._id };
     const income = await Income.findOne(query);
     if (!income) {
       return res.status(404).json({ message: 'Income not found' });
@@ -72,10 +70,8 @@ router.put('/:id', authenticate, async (req, res) => {
     // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any income, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only update their own income
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[INCOME UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -96,10 +92,8 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete income
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any income, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only delete their own income
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[INCOME DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -118,8 +112,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // Admin users can see all income, regular users see only their own
-    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    // All users see only their own income
+    const query = { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

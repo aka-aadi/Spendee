@@ -8,10 +8,8 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all budgets
 router.get('/', authenticate, async (req, res) => {
   try {
-    // Admin users can see all budgets, regular users see only their own
-    const budgetQuery = req.user.role === 'admin' 
-      ? { isActive: true }
-      : { userId: req.user._id, isActive: true };
+    // All users see only their own budgets
+    const budgetQuery = { userId: req.user._id, isActive: true };
     
     console.log(`[BUDGET GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(budgetQuery));
     
@@ -28,7 +26,7 @@ router.get('/', authenticate, async (req, res) => {
     // This is significantly faster than fetching all expenses/UPI and filtering in memory
     const budgetsWithSpent = await Promise.all(
       budgets.map(async (budget) => {
-        const baseQuery = req.user.role === 'admin' ? {} : { userId: req.user._id };
+        const baseQuery = { userId: req.user._id };
         
         // Use aggregation to calculate totals for this specific budget's date range and category
         const [expenseResult, upiResult] = await Promise.all([
@@ -77,19 +75,15 @@ router.get('/', authenticate, async (req, res) => {
 // Get budget by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can see any budget, regular users see only their own
-    const budgetQuery = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users see only their own budgets
+    const budgetQuery = { _id: req.params.id, userId: req.user._id };
     const budget = await Budget.findOne(budgetQuery);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
     
-    // For admin, get all expenses; for regular users, only their own
-    const expenseQuery = req.user.role === 'admin'
-      ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } }
-      : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
+    // All users see only their own expenses
+    const expenseQuery = { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
     
     // Use aggregation for faster calculation
     const expenseResult = await Expense.aggregate([
@@ -97,10 +91,8 @@ router.get('/:id', authenticate, async (req, res) => {
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
     
-    // For admin, get all UPI payments; for regular users, only their own
-    const upiQuery = req.user.role === 'admin'
-      ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' }
-      : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
+    // All users see only their own UPI payments
+    const upiQuery = { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
     
     const upiResult = await UPIPayment.aggregate([
       { $match: upiQuery },
@@ -150,10 +142,8 @@ router.put('/:id', authenticate, async (req, res) => {
     // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    // Admin users can update any budget, regular users can only update their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only update their own budgets
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[BUDGET UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
@@ -174,10 +164,8 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete budget
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // Admin users can delete any budget, regular users can only delete their own
-    const query = req.user.role === 'admin'
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user._id };
+    // All users can only delete their own budgets
+    const query = { _id: req.params.id, userId: req.user._id };
     
     console.log(`[BUDGET DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
