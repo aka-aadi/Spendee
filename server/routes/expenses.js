@@ -6,10 +6,10 @@ const Expense = require('../models/Expense');
 // Get all expenses
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see all expenses (shared data)
-    const query = {};
+    // Admin users can see all expenses, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
-    console.log(`[EXPENSE GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {} (shared data)`);
+    console.log(`[EXPENSE GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     let expensesQuery = Expense.find(query)
@@ -21,7 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const expenses = await expensesQuery;
-    console.log(`[EXPENSE GET] Found ${expenses.length} expenses (shared)`);
+    console.log(`[EXPENSE GET] Found ${expenses.length} expenses for user ${req.user._id}`);
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses', error: error.message });
@@ -31,8 +31,11 @@ router.get('/', authenticate, async (req, res) => {
 // Get expense by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users can see any expense (shared data)
-    const expense = await Expense.findById(req.params.id);
+    // Admin users can see any expense, regular users see only their own
+    const query = req.user.role === 'admin' 
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const expense = await Expense.findOne(query);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
@@ -45,16 +48,16 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create expense
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, userId is optional for tracking
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...expenseData } = req.body;
     
-    // Set userId for tracking who created it, but data is shared
+    // Always use the authenticated user's ID
     const expense = new Expense({
       ...expenseData,
       userId: req.user._id
     });
     
-    console.log(`[EXPENSE CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    console.log(`[EXPENSE CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
     
     await expense.save();
     res.status(201).json(expense);
@@ -66,13 +69,18 @@ router.post('/', authenticate, async (req, res) => {
 // Update expense
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, any user can update
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    console.log(`[EXPENSE UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can update any expense, regular users can only update their own
+    const query = req.user.role === 'admin' 
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const expense = await Expense.findByIdAndUpdate(
-      req.params.id,
+    console.log(`[EXPENSE UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const expense = await Expense.findOneAndUpdate(
+      query,
       updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
@@ -88,14 +96,18 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete expense
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can delete any expense (shared data)
-    console.log(`[EXPENSE DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can delete any expense, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const expense = await Expense.findByIdAndDelete(req.params.id);
+    console.log(`[EXPENSE DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const expense = await Expense.findOneAndDelete(query);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
-    console.log(`[EXPENSE DELETE] Deleted expense ${req.params.id}`);
+    console.log(`[EXPENSE DELETE] Deleted expense ${req.params.id} with userId: ${expense.userId}`);
     res.json({ message: 'Expense deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting expense', error: error.message });
@@ -106,8 +118,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // All users see all expenses (shared data)
-    const query = {};
+    // Admin users can see all expenses, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

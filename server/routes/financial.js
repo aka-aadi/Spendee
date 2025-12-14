@@ -13,10 +13,10 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // All users see all data (shared data)
-    const query = {};
+    // Admin users can see all data, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
-    console.log(`[FINANCIAL SUMMARY] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {} (shared data)`);
+    console.log(`[FINANCIAL SUMMARY] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
     let dateQuery = {};
     if (startDate && endDate) {

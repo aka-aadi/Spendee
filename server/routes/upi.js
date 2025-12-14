@@ -6,10 +6,10 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all UPI payments
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see all UPI payments (shared data)
-    const query = {};
+    // Admin users can see all UPI payments, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
-    console.log(`[UPI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {} (shared data)`);
+    console.log(`[UPI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     let upiQuery = UPIPayment.find(query)
@@ -21,7 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const upiPayments = await upiQuery;
-    console.log(`[UPI GET] Found ${upiPayments.length} UPI payments (shared)`);
+    console.log(`[UPI GET] Found ${upiPayments.length} UPI payments for user ${req.user._id}`);
     res.json(upiPayments);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching UPI payments', error: error.message });
@@ -31,8 +31,11 @@ router.get('/', authenticate, async (req, res) => {
 // Get UPI payment by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users can see any UPI payment (shared data)
-    const upiPayment = await UPIPayment.findById(req.params.id);
+    // Admin users can see any UPI payment, regular users see only their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const upiPayment = await UPIPayment.findOne(query);
     if (!upiPayment) {
       return res.status(404).json({ message: 'UPI payment not found' });
     }
@@ -45,7 +48,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create UPI payment
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, userId is optional for tracking
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...paymentData } = req.body;
     
     // Generate transaction ID if not provided
@@ -53,13 +56,13 @@ router.post('/', authenticate, async (req, res) => {
       paymentData.transactionId = `TXN${Date.now()}${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     }
     
-    // Set userId for tracking who created it, but data is shared
+    // Always use the authenticated user's ID
     const upiPayment = new UPIPayment({
       ...paymentData,
       userId: req.user._id
     });
     
-    console.log(`[UPI CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    console.log(`[UPI CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
     
     await upiPayment.save();
     res.status(201).json(upiPayment);
@@ -71,13 +74,18 @@ router.post('/', authenticate, async (req, res) => {
 // Update UPI payment
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, any user can update
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    console.log(`[UPI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can update any UPI payment, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const upiPayment = await UPIPayment.findByIdAndUpdate(
-      req.params.id,
+    console.log(`[UPI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const upiPayment = await UPIPayment.findOneAndUpdate(
+      query,
       updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
@@ -93,14 +101,18 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete UPI payment
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can delete any UPI payment (shared data)
-    console.log(`[UPI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can delete any UPI payment, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const upiPayment = await UPIPayment.findByIdAndDelete(req.params.id);
+    console.log(`[UPI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const upiPayment = await UPIPayment.findOneAndDelete(query);
     if (!upiPayment) {
       return res.status(404).json({ message: 'UPI payment not found' });
     }
-    console.log(`[UPI DELETE] Deleted UPI payment ${req.params.id}`);
+    console.log(`[UPI DELETE] Deleted UPI payment ${req.params.id} with userId: ${upiPayment.userId}`);
     res.json({ message: 'UPI payment deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting UPI payment', error: error.message });
@@ -111,8 +123,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // All users see all UPI payments (shared data)
-    const query = {};
+    // Admin users can see all UPI payments, regular users see only their own
+    const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };

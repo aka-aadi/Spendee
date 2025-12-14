@@ -8,10 +8,12 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all budgets
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see all budgets (shared data)
-    const budgetQuery = { isActive: true };
+    // Admin users can see all budgets, regular users see only their own
+    const budgetQuery = req.user.role === 'admin' 
+      ? { isActive: true }
+      : { userId: req.user._id, isActive: true };
     
-    console.log(`[BUDGET GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query: {isActive: true} (shared data)`);
+    console.log(`[BUDGET GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(budgetQuery));
     
     // Fetch budgets with .lean() for better performance
     const budgets = await Budget.find(budgetQuery)
@@ -26,8 +28,7 @@ router.get('/', authenticate, async (req, res) => {
     // This is significantly faster than fetching all expenses/UPI and filtering in memory
     const budgetsWithSpent = await Promise.all(
       budgets.map(async (budget) => {
-        // All users see all data (shared)
-        const baseQuery = {};
+        const baseQuery = req.user.role === 'admin' ? {} : { userId: req.user._id };
         
         // Use aggregation to calculate totals for this specific budget's date range and category
         const [expenseResult, upiResult] = await Promise.all([
@@ -76,14 +77,19 @@ router.get('/', authenticate, async (req, res) => {
 // Get budget by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users can see any budget (shared data)
-    const budget = await Budget.findById(req.params.id);
+    // Admin users can see any budget, regular users see only their own
+    const budgetQuery = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
+    const budget = await Budget.findOne(budgetQuery);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
     
-    // All users see all expenses/UPI (shared data)
-    const expenseQuery = { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
+    // For admin, get all expenses; for regular users, only their own
+    const expenseQuery = req.user.role === 'admin'
+      ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } }
+      : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
     
     // Use aggregation for faster calculation
     const expenseResult = await Expense.aggregate([
@@ -91,8 +97,10 @@ router.get('/:id', authenticate, async (req, res) => {
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
     
-    // All users see all UPI payments (shared data)
-    const upiQuery = { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
+    // For admin, get all UPI payments; for regular users, only their own
+    const upiQuery = req.user.role === 'admin'
+      ? { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' }
+      : { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
     
     const upiResult = await UPIPayment.aggregate([
       { $match: upiQuery },
@@ -118,16 +126,16 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create budget
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, userId is optional for tracking
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...budgetData } = req.body;
     
-    // Set userId for tracking who created it, but data is shared
+    // Always use the authenticated user's ID
     const budget = new Budget({
       ...budgetData,
       userId: req.user._id
     });
     
-    console.log(`[BUDGET CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    console.log(`[BUDGET CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
     
     await budget.save();
     res.status(201).json(budget);
@@ -139,13 +147,18 @@ router.post('/', authenticate, async (req, res) => {
 // Update budget
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Remove userId from body - data is shared, any user can update
+    // Explicitly remove userId from body to prevent client manipulation
     const { userId, ...updateData } = req.body;
     
-    console.log(`[BUDGET UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can update any budget, regular users can only update their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const budget = await Budget.findByIdAndUpdate(
-      req.params.id,
+    console.log(`[BUDGET UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const budget = await Budget.findOneAndUpdate(
+      query,
       updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
@@ -161,14 +174,18 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete budget
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can delete any budget (shared data)
-    console.log(`[BUDGET DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role} (shared data)`);
+    // Admin users can delete any budget, regular users can only delete their own
+    const query = req.user.role === 'admin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, userId: req.user._id };
     
-    const budget = await Budget.findByIdAndDelete(req.params.id);
+    console.log(`[BUDGET DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
+    const budget = await Budget.findOneAndDelete(query);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
-    console.log(`[BUDGET DELETE] Deleted budget ${req.params.id}`);
+    console.log(`[BUDGET DELETE] Deleted budget ${req.params.id} with userId: ${budget.userId}`);
     res.json({ message: 'Budget deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting budget', error: error.message });
