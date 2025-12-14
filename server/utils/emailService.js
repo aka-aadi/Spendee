@@ -33,7 +33,15 @@ const sendOTPEmail = async (email, otp) => {
         email: fromEmail,
         name: fromName
       },
+      replyTo: fromEmail, // Add reply-to for better deliverability
       subject: 'Verify Your Email - Spentee',
+      // Add headers to improve deliverability
+      headers: {
+        'X-Entity-Ref-ID': `otp-${Date.now()}`, // Unique identifier
+        'List-Unsubscribe': `<mailto:${fromEmail}?subject=unsubscribe>`, // Unsubscribe option
+      },
+      // Add categories for better tracking
+      categories: ['otp-verification'],
       html: `
         <!DOCTYPE html>
         <html>
