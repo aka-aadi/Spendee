@@ -8,6 +8,9 @@ router.get('/', authenticate, async (req, res) => {
   try {
     // Admin users can see all expenses, regular users see only their own
     const query = req.user.role === 'admin' ? {} : { userId: req.user._id };
+    
+    console.log(`[EXPENSE GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
     let expensesQuery = Expense.find(query)
       .lean() // Use lean() for read-only queries - much faster
@@ -18,6 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const expenses = await expensesQuery;
+    console.log(`[EXPENSE GET] Found ${expenses.length} expenses for user ${req.user._id}`);
     res.json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses', error: error.message });
@@ -44,10 +48,17 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create expense
 router.post('/', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...expenseData } = req.body;
+    
+    // Always use the authenticated user's ID
     const expense = new Expense({
-      ...req.body,
+      ...expenseData,
       userId: req.user._id
     });
+    
+    console.log(`[EXPENSE CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
+    
     await expense.save();
     res.status(201).json(expense);
   } catch (error) {
@@ -58,13 +69,19 @@ router.post('/', authenticate, async (req, res) => {
 // Update expense
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...updateData } = req.body;
+    
     // Admin users can update any expense, regular users can only update their own
-    const query = req.user.role === 'admin'
+    const query = req.user.role === 'admin' 
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[EXPENSE UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const expense = await Expense.findOneAndUpdate(
       query,
-      req.body,
+      updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
     if (!expense) {
@@ -83,10 +100,14 @@ router.delete('/:id', authenticate, async (req, res) => {
     const query = req.user.role === 'admin'
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[EXPENSE DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const expense = await Expense.findOneAndDelete(query);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
     }
+    console.log(`[EXPENSE DELETE] Deleted expense ${req.params.id} with userId: ${expense.userId}`);
     res.json({ message: 'Expense deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting expense', error: error.message });

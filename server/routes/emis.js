@@ -11,6 +11,9 @@ router.get('/', authenticate, async (req, res) => {
     const query = req.user.role === 'admin'
       ? { isActive: true }
       : { userId: req.user._id, isActive: true };
+    
+    console.log(`[EMI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const emis = await EMI.find(query)
       .lean() // Use lean() for read-only queries - much faster
       .sort({ createdAt: -1 });
@@ -47,10 +50,17 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create EMI
 router.post('/', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...emiData } = req.body;
+    
+    // Always use the authenticated user's ID
     const emi = new EMI({
-      ...req.body,
+      ...emiData,
       userId: req.user._id
     });
+    
+    console.log(`[EMI CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
+    
     await emi.save();
     res.status(201).json(emi);
   } catch (error) {
@@ -61,13 +71,19 @@ router.post('/', authenticate, async (req, res) => {
 // Update EMI
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...updateData } = req.body;
+    
     // Admin users can update any EMI, regular users can only update their own
     const query = req.user.role === 'admin'
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[EMI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const emi = await EMI.findOneAndUpdate(
       query,
-      req.body,
+      updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
     if (!emi) {
@@ -86,10 +102,14 @@ router.delete('/:id', authenticate, async (req, res) => {
     const query = req.user.role === 'admin'
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[EMI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const emi = await EMI.findOneAndDelete(query);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
     }
+    console.log(`[EMI DELETE] Deleted EMI ${req.params.id} with userId: ${emi.userId}`);
     res.json({ message: 'EMI deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting EMI', error: error.message });

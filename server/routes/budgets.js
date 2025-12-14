@@ -13,6 +13,8 @@ router.get('/', authenticate, async (req, res) => {
       ? { isActive: true }
       : { userId: req.user._id, isActive: true };
     
+    console.log(`[BUDGET GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(budgetQuery));
+    
     // Fetch budgets with .lean() for better performance
     const budgets = await Budget.find(budgetQuery)
       .lean()
@@ -124,10 +126,17 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create budget
 router.post('/', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...budgetData } = req.body;
+    
+    // Always use the authenticated user's ID
     const budget = new Budget({
-      ...req.body,
+      ...budgetData,
       userId: req.user._id
     });
+    
+    console.log(`[BUDGET CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
+    
     await budget.save();
     res.status(201).json(budget);
   } catch (error) {
@@ -138,13 +147,19 @@ router.post('/', authenticate, async (req, res) => {
 // Update budget
 router.put('/:id', authenticate, async (req, res) => {
   try {
+    // Explicitly remove userId from body to prevent client manipulation
+    const { userId, ...updateData } = req.body;
+    
     // Admin users can update any budget, regular users can only update their own
     const query = req.user.role === 'admin'
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[BUDGET UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const budget = await Budget.findOneAndUpdate(
       query,
-      req.body,
+      updateData, // Use sanitized data without userId
       { new: true, runValidators: true }
     );
     if (!budget) {
@@ -163,10 +178,14 @@ router.delete('/:id', authenticate, async (req, res) => {
     const query = req.user.role === 'admin'
       ? { _id: req.params.id }
       : { _id: req.params.id, userId: req.user._id };
+    
+    console.log(`[BUDGET DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
+    
     const budget = await Budget.findOneAndDelete(query);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
+    console.log(`[BUDGET DELETE] Deleted budget ${req.params.id} with userId: ${budget.userId}`);
     res.json({ message: 'Budget deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting budget', error: error.message });
