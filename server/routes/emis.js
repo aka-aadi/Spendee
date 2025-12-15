@@ -6,16 +6,9 @@ const EMI = require('../models/EMI');
 // Get all EMIs
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see only their own EMIs
-    // Sort by creation date descending (newest first - reverse of added order)
-    const query = { userId: req.user._id, isActive: true };
-    
-    console.log(`[EMI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    // Remove limit to show all active EMIs
-    const emis = await EMI.find(query)
-      .lean() // Use lean() for read-only queries - much faster
-      .sort({ createdAt: -1 }); // Show newest first
+    const emis = await EMI.find({ isActive: true })
+      .lean()
+      .sort({ createdAt: -1 });
     
     // Ensure paidMonthDates is always an array (lean() might not apply defaults)
     const emisWithDefaults = emis.map(emi => ({
@@ -32,9 +25,7 @@ router.get('/', authenticate, async (req, res) => {
 // Get EMI by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users see only their own EMIs
-    const query = { _id: req.params.id, userId: req.user._id };
-    const emi = await EMI.findOne(query);
+    const emi = await EMI.findById(req.params.id);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
     }
@@ -47,17 +38,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create EMI
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...emiData } = req.body;
-    
-    // Always use the authenticated user's ID
-    const emi = new EMI({
-      ...emiData,
-      userId: req.user._id
-    });
-    
-    console.log(`[EMI CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
-    
+    const emi = new EMI(req.body);
     await emi.save();
     res.status(201).json(emi);
   } catch (error) {
@@ -68,17 +49,9 @@ router.post('/', authenticate, async (req, res) => {
 // Update EMI
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...updateData } = req.body;
-    
-    // All users can only update their own EMIs
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[EMI UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const emi = await EMI.findOneAndUpdate(
-      query,
-      updateData, // Use sanitized data without userId
+    const emi = await EMI.findByIdAndUpdate(
+      req.params.id,
+      req.body,
       { new: true, runValidators: true }
     );
     if (!emi) {
@@ -93,16 +66,10 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete EMI
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can only delete their own EMIs
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[EMI DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const emi = await EMI.findOneAndDelete(query);
+    const emi = await EMI.findByIdAndDelete(req.params.id);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
     }
-    console.log(`[EMI DELETE] Deleted EMI ${req.params.id} with userId: ${emi.userId}`);
     res.json({ message: 'EMI deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting EMI', error: error.message });
@@ -112,16 +79,13 @@ router.delete('/:id', authenticate, async (req, res) => {
 // Mark EMI payment
 router.post('/:id/pay', authenticate, async (req, res) => {
   try {
-    // All users can only mark payment for their own EMIs
-    const query = { _id: req.params.id, userId: req.user._id };
-    const emi = await EMI.findOne(query);
+    const emi = await EMI.findById(req.params.id);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
     }
 
     const now = new Date();
     const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthKey = currentMonth.toISOString();
 
     // Check if already paid for this month
     const alreadyPaid = emi.paidMonthDates.some(date => {
@@ -157,9 +121,7 @@ router.post('/:id/pay', authenticate, async (req, res) => {
 // Unmark EMI payment for current month
 router.post('/:id/unpay', authenticate, async (req, res) => {
   try {
-    // All users can only unmark payment for their own EMIs
-    const query = { _id: req.params.id, userId: req.user._id };
-    const emi = await EMI.findOne(query);
+    const emi = await EMI.findById(req.params.id);
     if (!emi) {
       return res.status(404).json({ message: 'EMI not found' });
     }

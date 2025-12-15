@@ -8,13 +8,7 @@ const UPIPayment = require('../models/UPIPayment');
 // Get all budgets
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see only their own budgets
-    const budgetQuery = { userId: req.user._id, isActive: true };
-    
-    console.log(`[BUDGET GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(budgetQuery));
-    
-    // Fetch budgets with .lean() for better performance
-    const budgets = await Budget.find(budgetQuery)
+    const budgets = await Budget.find({ isActive: true })
       .lean()
       .sort({ createdAt: -1 });
     
@@ -22,18 +16,13 @@ router.get('/', authenticate, async (req, res) => {
       return res.json([]);
     }
     
-    // Use aggregation for MUCH faster calculation - calculate spent per budget using database aggregation
-    // This is significantly faster than fetching all expenses/UPI and filtering in memory
+    // Use aggregation for MUCH faster calculation
     const budgetsWithSpent = await Promise.all(
       budgets.map(async (budget) => {
-        const baseQuery = { userId: req.user._id };
-        
-        // Use aggregation to calculate totals for this specific budget's date range and category
         const [expenseResult, upiResult] = await Promise.all([
           Expense.aggregate([
             {
               $match: {
-                ...baseQuery,
                 category: budget.category,
                 date: { $gte: new Date(budget.startDate), $lte: new Date(budget.endDate) }
               }
@@ -43,7 +32,6 @@ router.get('/', authenticate, async (req, res) => {
           UPIPayment.aggregate([
             {
               $match: {
-                ...baseQuery,
                 category: budget.category,
                 status: 'Success',
                 date: { $gte: new Date(budget.startDate), $lte: new Date(budget.endDate) }
@@ -75,31 +63,25 @@ router.get('/', authenticate, async (req, res) => {
 // Get budget by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users see only their own budgets
-    const budgetQuery = { _id: req.params.id, userId: req.user._id };
-    const budget = await Budget.findOne(budgetQuery);
+    const budget = await Budget.findById(req.params.id);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
     
-    // All users see only their own expenses
-    const expenseQuery = { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
+    const expenseQuery = { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate } };
+    const upiQuery = { category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
     
-    // Use aggregation for faster calculation
-    const expenseResult = await Expense.aggregate([
-      { $match: expenseQuery },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
+    const [expenseResult, upiResult] = await Promise.all([
+      Expense.aggregate([
+        { $match: expenseQuery },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]),
+      UPIPayment.aggregate([
+        { $match: upiQuery },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ])
     ]);
     
-    // All users see only their own UPI payments
-    const upiQuery = { userId: req.user._id, category: budget.category, date: { $gte: budget.startDate, $lte: budget.endDate }, status: 'Success' };
-    
-    const upiResult = await UPIPayment.aggregate([
-      { $match: upiQuery },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
-    
-    // Calculate totals from aggregation results
     const expenseTotal = expenseResult.length > 0 ? expenseResult[0].total : 0;
     const upiTotal = upiResult.length > 0 ? upiResult[0].total : 0;
     const spent = expenseTotal + upiTotal;
@@ -118,17 +100,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create budget
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...budgetData } = req.body;
-    
-    // Always use the authenticated user's ID
-    const budget = new Budget({
-      ...budgetData,
-      userId: req.user._id
-    });
-    
-    console.log(`[BUDGET CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
-    
+    const budget = new Budget(req.body);
     await budget.save();
     res.status(201).json(budget);
   } catch (error) {
@@ -139,17 +111,9 @@ router.post('/', authenticate, async (req, res) => {
 // Update budget
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...updateData } = req.body;
-    
-    // All users can only update their own budgets
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[BUDGET UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const budget = await Budget.findOneAndUpdate(
-      query,
-      updateData, // Use sanitized data without userId
+    const budget = await Budget.findByIdAndUpdate(
+      req.params.id,
+      req.body,
       { new: true, runValidators: true }
     );
     if (!budget) {
@@ -164,16 +128,10 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete budget
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can only delete their own budgets
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[BUDGET DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const budget = await Budget.findOneAndDelete(query);
+    const budget = await Budget.findByIdAndDelete(req.params.id);
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
     }
-    console.log(`[BUDGET DELETE] Deleted budget ${req.params.id} with userId: ${budget.userId}`);
     res.json({ message: 'Budget deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting budget', error: error.message });

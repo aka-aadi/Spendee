@@ -13,110 +13,93 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // All users see only their own data
-    const query = { userId: req.user._id };
-    
-    console.log(`[FINANCIAL SUMMARY] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
     let dateQuery = {};
     if (startDate && endDate) {
       dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
 
-    // Use aggregation pipelines for MUCH faster calculations - only fetch totals, not all documents
-    // This dramatically reduces data transfer and processing time
+    // Use aggregation pipelines for MUCH faster calculations
     const [allExpensesTotal, allIncomeTotal, allUPITotal, allSavingsTotal, expensesTotal, incomeTotal, expenses, income, budgets, emis, upiPayments, savings, allEMIsForBalance] = await Promise.all([
-      // Calculate totals using aggregation (MUCH faster than fetching all documents)
-      // IMPORTANT: Explicitly use userId to ensure data isolation
       Expense.aggregate([
-        { $match: { userId: req.user._id } },
+        { $match: {} },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
       Income.aggregate([
-        { $match: { userId: req.user._id } },
+        { $match: {} },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
       UPIPayment.aggregate([
-        { $match: { userId: req.user._id, status: 'Success' } },
+        { $match: { status: 'Success' } },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
       Saving.aggregate([
-        { $match: { userId: req.user._id } },
+        { $match: {} },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
-      // Calculate monthly totals using aggregation
-      // IMPORTANT: Explicitly use userId to ensure data isolation
       Expense.aggregate([
-        { $match: { userId: req.user._id, ...dateQuery } },
+        { $match: dateQuery },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
       Income.aggregate([
-        { $match: { userId: req.user._id, ...dateQuery } },
+        { $match: dateQuery },
         { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
       ]).then(result => ({ total: result[0]?.total || 0, count: result[0]?.count || 0 })),
-      // Only fetch items for category breakdown (reduced limits for faster response)
-      // IMPORTANT: Explicitly use userId to ensure data isolation
-      Expense.find({ userId: req.user._id, ...dateQuery })
+      Expense.find(dateQuery)
         .lean()
-        .select('amount category date userId')
+        .select('amount category date')
         .sort({ date: -1 })
-        .limit(100) // Reduced from 500 for faster response
+        .limit(100)
         .catch(err => {
           console.error('Error fetching expenses:', err);
           throw err;
         }),
-      Income.find({ userId: req.user._id, ...dateQuery })
+      Income.find(dateQuery)
         .lean()
-        .select('amount type date userId')
+        .select('amount type date')
         .sort({ date: -1 })
-        .limit(100) // Reduced from 500 for faster response
+        .limit(100)
         .catch(err => {
           console.error('Error fetching income:', err);
           throw err;
         }),
-      Budget.find({ userId: req.user._id, isActive: true })
+      Budget.find({ isActive: true })
         .lean()
-        .select('category amount startDate endDate userId')
+        .select('category amount startDate endDate')
         .sort({ createdAt: -1 })
-        .limit(50) // Reduced from 100 for faster response
+        .limit(50)
         .catch(err => {
           console.error('Error fetching budgets:', err);
           throw err;
         }),
-      // IMPORTANT: Must explicitly include userId in query to ensure data isolation
-      // Fetch ALL active EMIs (no limit) to show complete list for monthly calculations
-      EMI.find({ userId: req.user._id, isActive: true })
+      EMI.find({ isActive: true })
         .lean()
-        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance name userId endDate isActive')
-        .sort({ nextDueDate: 1 }) // Sort by next due date
+        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance name endDate isActive')
+        .sort({ nextDueDate: 1 })
         .catch(err => {
           console.error('Error fetching EMIs:', err);
           throw err;
         }),
-      // IMPORTANT: Explicitly use userId to ensure data isolation
-      UPIPayment.find({ userId: req.user._id, ...dateQuery, status: 'Success' })
+      UPIPayment.find({ ...dateQuery, status: 'Success' })
         .lean()
-        .select('amount category date userId')
+        .select('amount category date')
         .sort({ date: -1 })
-        .limit(100) // Reduced from 500 for faster response
+        .limit(100)
         .catch(err => {
           console.error('Error fetching UPI payments:', err);
           throw err;
         }),
-      Saving.find({ userId: req.user._id, ...dateQuery })
+      Saving.find(dateQuery)
         .lean()
-        .select('amount date userId')
+        .select('amount date')
         .sort({ date: -1 })
-        .limit(100) // Reduced from 500 for faster response
+        .limit(100)
         .catch(err => {
           console.error('Error fetching savings:', err);
           return [];
         }),
-      // Fetch ALL EMIs for cumulative balance calculation (not limited, not date-filtered)
-      // IMPORTANT: Must explicitly include userId in query to ensure data isolation
-      EMI.find({ userId: req.user._id, isActive: true })
+      EMI.find({ isActive: true })
         .lean()
-        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance userId')
+        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance')
         .catch(err => {
           console.error('Error fetching all EMIs for balance:', err);
           return [];
@@ -268,20 +251,9 @@ router.get('/summary', authenticate, async (req, res) => {
     let cumulativeTotalEMI = 0;
     let cumulativeTotalDownPayments = 0;
     
-    console.log(`[BALANCE CALC] User: ${req.user._id} - Processing ${allEMIsForBalance.length} EMIs for balance calculation`);
-    
-    // Verify all EMIs belong to the current user
-    const wrongUserEMIs = allEMIsForBalance.filter(emi => emi.userId && emi.userId.toString() !== req.user._id.toString());
-    if (wrongUserEMIs.length > 0) {
-      console.error(`[BALANCE CALC ERROR] Found ${wrongUserEMIs.length} EMIs from other users! User: ${req.user._id}, Wrong EMIs:`, wrongUserEMIs.map(e => ({ id: e._id, userId: e.userId })));
-    }
+    console.log(`[BALANCE CALC] Processing ${allEMIsForBalance.length} EMIs for balance calculation`);
     
     allEMIsForBalance.forEach((emi, index) => {
-      // Double-check userId matches (safety check)
-      if (emi.userId && emi.userId.toString() !== req.user._id.toString()) {
-        console.error(`[BALANCE CALC ERROR] Skipping EMI ${emi._id} - belongs to user ${emi.userId}, not ${req.user._id}`);
-        return; // Skip this EMI
-      }
       
       const emiStartDate = new Date(emi.startDate);
       const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
@@ -326,12 +298,7 @@ router.get('/summary', authenticate, async (req, res) => {
     });
     
     const totalBudget = budgets.reduce((sum, budget) => {
-      // Filter expenses by userId AND category/date to ensure data isolation
       const budgetExpenses = expenses.filter(exp => {
-        // Safety check: verify expense belongs to current user
-        if (exp.userId && exp.userId.toString() !== req.user._id.toString()) {
-          return false; // Skip expenses from other users
-        }
         return exp.category === budget.category &&
                new Date(exp.date) >= budget.startDate &&
                new Date(exp.date) <= budget.endDate;
@@ -388,18 +355,17 @@ router.get('/summary', authenticate, async (req, res) => {
     });
 
     // Use aggregation for faster category calculations
-    // IMPORTANT: Explicitly use userId to ensure data isolation
     const [expenseCategoryTotals, upiCategoryTotals, incomeTypeTotals] = await Promise.all([
       Expense.aggregate([
-        { $match: { userId: req.user._id, ...dateQuery } },
+        { $match: dateQuery },
         { $group: { _id: '$category', total: { $sum: '$amount' } } }
       ]),
       UPIPayment.aggregate([
-        { $match: { userId: req.user._id, ...dateQuery, status: 'Success' } },
+        { $match: { ...dateQuery, status: 'Success' } },
         { $group: { _id: '$category', total: { $sum: '$amount' } } }
       ]),
       Income.aggregate([
-        { $match: { userId: req.user._id, ...dateQuery } },
+        { $match: dateQuery },
         { $group: { _id: '$type', total: { $sum: '$amount' } } }
       ])
     ]);

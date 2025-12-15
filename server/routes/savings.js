@@ -6,14 +6,9 @@ const Saving = require('../models/Saving');
 // Get all savings
 router.get('/', authenticate, async (req, res) => {
   try {
-    // All users see only their own savings
-    const query = { userId: req.user._id };
-    
-    console.log(`[SAVING GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
     const limit = req.query.limit ? parseInt(req.query.limit) : null;
-    let savingsQuery = Saving.find(query)
-      .lean() // Use lean() for read-only queries - much faster
+    let savingsQuery = Saving.find({})
+      .lean()
       .sort({ date: -1 });
     
     if (limit) {
@@ -21,7 +16,6 @@ router.get('/', authenticate, async (req, res) => {
     }
     
     const savings = await savingsQuery;
-    console.log(`[SAVING GET] Found ${savings.length} savings for user ${req.user._id}`);
     res.json(savings);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching savings', error: error.message });
@@ -31,9 +25,7 @@ router.get('/', authenticate, async (req, res) => {
 // Get saving by ID
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    // All users see only their own savings
-    const query = { _id: req.params.id, userId: req.user._id };
-    const saving = await Saving.findOne(query);
+    const saving = await Saving.findById(req.params.id);
     if (!saving) {
       return res.status(404).json({ message: 'Saving not found' });
     }
@@ -46,17 +38,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create saving
 router.post('/', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...savingData } = req.body;
-    
-    // Always use the authenticated user's ID
-    const saving = new Saving({
-      ...savingData,
-      userId: req.user._id
-    });
-    
-    console.log(`[SAVING CREATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}`);
-    
+    const saving = new Saving(req.body);
     await saving.save();
     res.status(201).json(saving);
   } catch (error) {
@@ -67,17 +49,9 @@ router.post('/', authenticate, async (req, res) => {
 // Update saving
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    // Explicitly remove userId from body to prevent client manipulation
-    const { userId, ...updateData } = req.body;
-    
-    // All users can only update their own savings
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[SAVING UPDATE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const saving = await Saving.findOneAndUpdate(
-      query,
-      updateData, // Use sanitized data without userId
+    const saving = await Saving.findByIdAndUpdate(
+      req.params.id,
+      req.body,
       { new: true, runValidators: true }
     );
     if (!saving) {
@@ -92,16 +66,10 @@ router.put('/:id', authenticate, async (req, res) => {
 // Delete saving
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    // All users can only delete their own savings
-    const query = { _id: req.params.id, userId: req.user._id };
-    
-    console.log(`[SAVING DELETE] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
-    
-    const saving = await Saving.findOneAndDelete(query);
+    const saving = await Saving.findByIdAndDelete(req.params.id);
     if (!saving) {
       return res.status(404).json({ message: 'Saving not found' });
     }
-    console.log(`[SAVING DELETE] Deleted saving ${req.params.id} with userId: ${saving.userId}`);
     res.json({ message: 'Saving deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting saving', error: error.message });
@@ -112,8 +80,7 @@ router.delete('/:id', authenticate, async (req, res) => {
 router.get('/stats/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    // All users see only their own savings
-    const query = { userId: req.user._id };
+    const query = {};
     
     if (startDate && endDate) {
       query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
@@ -141,4 +108,3 @@ router.get('/stats/summary', authenticate, async (req, res) => {
 });
 
 module.exports = router;
-
