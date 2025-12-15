@@ -13,23 +13,12 @@ router.get('/summary', authenticate, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    // Determine date range - default to current month if not provided
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
+    // For the main summary:
+    // - When a date range is provided, use that range (monthly view)
+    // - When no range is provided, use ALL data (all‑time summary)
     let dateQuery = {};
-    let dateRangeStart, dateRangeEnd;
-    
     if (startDate && endDate) {
-      dateRangeStart = new Date(startDate);
-      dateRangeEnd = new Date(endDate);
-      dateQuery = { date: { $gte: dateRangeStart, $lte: dateRangeEnd } };
-    } else {
-      // Default to current month if no date range specified
-      dateRangeStart = new Date(currentYear, currentMonth, 1);
-      dateRangeEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
-      dateQuery = { date: { $gte: dateRangeStart, $lte: dateRangeEnd } };
+      dateQuery = { date: { $gte: new Date(startDate), $lte: new Date(endDate) } };
     }
 
     // Use aggregation pipelines for MUCH faster calculations
