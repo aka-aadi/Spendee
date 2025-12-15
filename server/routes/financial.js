@@ -84,11 +84,11 @@ router.get('/summary', authenticate, async (req, res) => {
           throw err;
         }),
       // IMPORTANT: Must explicitly include userId in query to ensure data isolation
+      // Fetch ALL active EMIs (no limit) to show complete list for monthly calculations
       EMI.find({ userId: req.user._id, isActive: true })
         .lean()
-        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance name userId')
-        .sort({ nextDueDate: 1 })
-        .limit(50) // Reduced from 100 for faster response
+        .select('monthlyEMI downPayment startDate paidMonthDates includeDownPaymentInBalance name userId endDate isActive')
+        .sort({ nextDueDate: 1 }) // Sort by next due date
         .catch(err => {
           console.error('Error fetching EMIs:', err);
           throw err;
@@ -206,37 +206,54 @@ router.get('/summary', authenticate, async (req, res) => {
       const emiStartDate = new Date(emi.startDate);
       const paidMonthDates = Array.isArray(emi.paidMonthDates) ? emi.paidMonthDates : [];
       
-      // EMI starts from next month after start date
-      // Count down payment if start date is today or in the past AND if it should be included
-      // AND if the start date falls within the date range
+      // Check if EMI is active and should be counted for this month
+      // An EMI should be counted if:
+      // 1. It's active (isActive: true)
+      // 2. The start date is before or equal to the end of the date range
+      // 3. The EMI hasn't ended (endDate check)
+      const emiEndDate = new Date(emi.endDate || emiStartDate);
+      const shouldCountEMI = emi.isActive && emiStartDate <= dateRangeEnd && emiEndDate >= dateRangeStart;
+      
+      if (!shouldCountEMI) {
+        return; // Skip this EMI if it doesn't apply to this month
+      }
+      
+      // Count down payment if start date falls within the date range AND if it should be included
       const shouldIncludeDownPayment = emi.includeDownPaymentInBalance !== undefined 
         ? emi.includeDownPaymentInBalance 
         : true; // Default to true for backward compatibility
       
-      // Only count down payment if it falls within the date range
+      // Count down payment if it falls within the date range
       if (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd && shouldIncludeDownPayment) {
         totalDownPayments += (emi.downPayment || 0);
       }
       
-      // Only count EMI amounts for months that are marked as paid WITHIN the date range
+      // For monthly EMI calculation, count ALL active EMIs for the month (not just paid ones)
+      // This shows the total EMI obligation for the month, regardless of payment status
+      // If the EMI start date is before or during this month, count it
+      if (emiStartDate <= dateRangeEnd) {
+        // Count this EMI for the month (one monthly payment)
+        totalEMI += emi.monthlyEMI;
+      }
+      
+      // Also track paid EMIs for reference
       const paidMonthsInRange = paidMonthDates.filter(paidDate => {
         const paid = new Date(paidDate);
         return paid >= dateRangeStart && paid <= dateRangeEnd;
       });
       
-      const emiAmountForRange = paidMonthsInRange.length * emi.monthlyEMI;
-      totalEMI += emiAmountForRange;
-      
-      if (emiAmountForRange > 0 || (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd)) {
-        console.log(`[MONTHLY CALC] EMI ${index + 1}/${emis.length}:`, {
-          name: emi.name || 'Unnamed',
-          monthlyEMI: emi.monthlyEMI,
-          totalPaidMonths: paidMonthDates.length,
-          paidMonthsInRange: paidMonthsInRange.length,
-          emiAmountForRange,
-          downPayment: (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd && shouldIncludeDownPayment) ? (emi.downPayment || 0) : 0
-        });
-      }
+      console.log(`[MONTHLY CALC] EMI ${index + 1}/${emis.length}:`, {
+        name: emi.name || 'Unnamed',
+        monthlyEMI: emi.monthlyEMI,
+        isActive: emi.isActive,
+        startDate: emiStartDate.toISOString(),
+        endDate: emiEndDate.toISOString(),
+        shouldCount: shouldCountEMI,
+        totalPaidMonths: paidMonthDates.length,
+        paidMonthsInRange: paidMonthsInRange.length,
+        emiAmountForMonth: emi.monthlyEMI,
+        downPayment: (emiStartDate >= dateRangeStart && emiStartDate <= dateRangeEnd && shouldIncludeDownPayment) ? (emi.downPayment || 0) : 0
+      });
     });
     
     console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Monthly totals:`, {
@@ -324,7 +341,17 @@ router.get('/summary', authenticate, async (req, res) => {
     }, 0);
 
     // Calculate total expenses (expenses + down payments + EMIs + UPI payments + savings)
+    // This is the complete monthly expense including all obligations
     const totalAllExpenses = totalExpenses + totalEMI + totalDownPayments + totalUPI + totalSavings;
+    
+    console.log(`[MONTHLY CALC] User: ${req.user._id} (${req.user.username}) - Complete monthly expense breakdown:`, {
+      regularExpenses: totalExpenses,
+      emis: totalEMI,
+      downPayments: totalDownPayments,
+      upi: totalUPI,
+      savings: totalSavings,
+      totalAllExpenses
+    });
     
     // Calculate cumulative available balance (from all time, not just current month)
     // This ensures balance carries over from previous months
@@ -417,7 +444,8 @@ router.get('/summary', authenticate, async (req, res) => {
         items: income.slice(0, 100) // Only return first 100 items for display
       },
       expenses: {
-        total: totalExpenses,
+        total: totalAllExpenses, // Total including expenses, EMIs, down payments, UPI, and savings
+        regularExpenses: totalExpenses, // Just regular expenses (without EMIs, down payments, etc.)
         totalAll: totalAllExpenses, // Total including expenses, EMIs, down payments, and UPI
         count: expensesTotal.count,
         byCategory: expensesByCategory,
@@ -443,13 +471,14 @@ router.get('/summary', authenticate, async (req, res) => {
         available: availableBalance,
         availableBalance: availableBalance,
         totalIncome,
-        totalExpenses,
+        totalExpenses: totalAllExpenses, // Monthly expenses including EMIs, down payments, UPI, and savings
+        regularExpenses: totalExpenses, // Just regular expenses (without EMIs, etc.)
         totalEMI,
         totalDownPayments,
         totalUPI,
         totalSavings,
         totalAllExpenses, // Total expenses including all components
-        remainingAfterExpenses: totalIncome - totalExpenses - totalEMI, // Net savings after EMIs
+        remainingAfterExpenses: totalIncome - totalAllExpenses, // Net savings after all expenses
         remainingAfterAll: availableBalance
       }
     });

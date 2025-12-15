@@ -12,9 +12,10 @@ router.get('/', authenticate, async (req, res) => {
     
     console.log(`[EMI GET] User: ${req.user._id} (${req.user.username}), Role: ${req.user.role}, Query:`, JSON.stringify(query));
     
+    // Remove limit to show all active EMIs
     const emis = await EMI.find(query)
       .lean() // Use lean() for read-only queries - much faster
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 }); // Show newest first
     
     // Ensure paidMonthDates is always an array (lean() might not apply defaults)
     const emisWithDefaults = emis.map(emi => ({
